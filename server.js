@@ -114,7 +114,7 @@ io.on("connection", (socket) => {
 });
 
 // ============================
-// 🌍 Endpoints HTTP
+// 🌍 Endpoints HTTP básicos
 // ============================
 app.get("/", (_, res) => res.send("🟢 Render Cloud activo y listo."));
 app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
@@ -132,18 +132,29 @@ app.get("/api/paneles", (_, res) => {
 // ============================
 const licPath = path.join(__dirname, "data", "licenses.json");
 
+/**
+ * GET /api/licencias — debug opcional
+ */
 app.get("/api/licencias", (_, res) => {
   try {
     const list = JSON.parse(fs.readFileSync(licPath, "utf8"));
-    res.json({ count: list.length, sample: list.slice(0, 3) });
+    res.json({ total: list.length, sample: list.slice(0, 3) });
   } catch (err) {
     res.status(500).json({ error: "Error al leer licencias", message: err.message });
   }
 });
 
-app.post("/api/validate-key", express.json(), (req, res) => {
+/**
+ * POST /api/validate-key — valida y registra el uso
+ * Body: { key: "...", deviceId?: "...", nombre?: "...", modelo?: "..." }
+ */
+app.post("/api/validate-key", (req, res) => {
   try {
     const key = req.body.key?.trim();
+    const deviceId = req.body.deviceId || "unknown";
+    const nombre = req.body.nombre || "Sin nombre";
+    const modelo = req.body.modelo || "—";
+
     if (!key) {
       return res.status(400).json({ valid: false, error: "Falta la clave" });
     }
@@ -153,15 +164,43 @@ app.post("/api/validate-key", express.json(), (req, res) => {
     }
 
     const licencias = JSON.parse(fs.readFileSync(licPath, "utf8"));
-    const encontrada = licencias.find((l) => l.key === key || l === key);
 
-    if (encontrada) {
-      console.log(🔑 Licencia válida usada: ${key});
-      return res.json({ valid: true, key, status: "ok" });
-    } else {
+    // Buscar licencia por clave
+    const licencia = licencias.find((l) => l.key === key || l === key);
+
+    if (!licencia) {
       console.log(❌ Intento con clave inválida: ${key});
       return res.status(403).json({ valid: false, error: "Clave no válida" });
     }
+
+    // Si la licencia ya está usada por otro device
+    if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId) {
+      console.log(⚠ Clave ${key} ya está en uso por otro dispositivo (${licencia.deviceId}).);
+      return res.status(409).json({
+        valid: false,
+        error: "Esta licencia ya está activada en otro dispositivo.",
+      });
+    }
+
+    // Marcar licencia como usada
+    licencia.usada = true;
+    licencia.deviceId = deviceId;
+    licencia.nombre = nombre;
+    licencia.modelo = modelo;
+    licencia.fechaUso = new Date().toISOString();
+
+    // Guardar cambios
+    fs.writeFileSync(licPath, JSON.stringify(licencias, null, 2));
+
+    console.log(🔑 Licencia válida usada: ${key} por ${nombre} (${deviceId}));
+
+    return res.json({
+      valid: true,
+      key,
+      status: "ok",
+      message: "Licencia válida",
+      deviceId,
+    });
   } catch (err) {
     console.error("⚠ Error validando licencia:", err);
     return res.status(500).json({ valid: false, error: "Error interno del servidor" });
@@ -178,7 +217,3 @@ server.listen(PORT, () => {
   console.log("✅  Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
-
-
-
-
