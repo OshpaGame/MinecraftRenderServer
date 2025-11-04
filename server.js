@@ -14,35 +14,44 @@ const server = http.createServer(app);
 // ============================
 const io = socketIo(server, {
   cors: { origin: "*" },
-  allowEIO3: true, // compatibilidad Android (socket.io-client 2.x)
+  allowEIO3: true, // compatibilidad con Android (socket.io-client 2.x)
 });
 
 // ============================
-// 🗂️ Estructuras de datos
+// 🗂️ Estructuras en memoria
 // ============================
-let androidClients = new Map(); // Clientes Android conectados
+let androidClients = new Map(); // Dispositivos Android conectados
 let panelesLocales = new Map(); // Paneles locales sincronizados
 
 // ============================
-// 🧩 Funciones auxiliares
+// 🧩 Utilidades
 // ============================
 function broadcastClients() {
   const list = Array.from(androidClients.values());
   io.emit("updateClientes", list);
-  console.log(`📡 Broadcast Render → ${list.length} dispositivos activos.`);
+  console.log(`📡 Render → Enviados ${list.length} dispositivo(s) activo(s).`);
+}
+
+function sanitizeIp(ip) {
+  if (!ip) return "unknown";
+  return ip.replace(/^::ffff:/, "").replace("::1", "localhost");
 }
 
 // ============================
-// 📱 Android Clients
+// ⚙️ Eventos principales Socket.IO
 // ============================
 io.on("connection", (socket) => {
   const ip =
     socket.handshake.headers["x-forwarded-for"] ||
-    socket.conn.remoteAddress?.replace(/^.*:/, "") ||
+    socket.conn.remoteAddress ||
     "unknown";
-  console.log(`🌍 Nueva conexión Socket: ${socket.id} (${ip})`);
+  const cleanIp = sanitizeIp(ip);
 
-  // === Registro de cliente Android ===
+  console.log(`🌍 Nueva conexión: ${socket.id} (${cleanIp})`);
+
+  // ======================
+  // 📱 Registro de cliente Android
+  // ======================
   socket.on("connectDevice", (data) => {
     if (!data) return;
     console.log("📱 Cliente Android conectado a Render:", data);
@@ -53,7 +62,7 @@ io.on("connection", (socket) => {
       nombre: data.nombre || "Desconocido",
       modelo: data.modelo || "—",
       versionApp: data.versionApp || "—",
-      ip,
+      ip: cleanIp,
       estado: "online",
       ultimaConexion: new Date().toISOString(),
     };
@@ -62,27 +71,44 @@ io.on("connection", (socket) => {
     broadcastClients();
   });
 
-  // === Registro de panel local ===
+  // ======================
+  // 🧠 Registro de panel maestro local
+  // ======================
   socket.on("registerPanel", (panelData) => {
-    panelesLocales.set(socket.id, {
+    const data = {
       ...panelData,
       socketId: socket.id,
       ultimaSync: new Date().toISOString(),
-    });
-    console.log(`🧠 Panel local sincronizado: ${panelData.panelId || socket.id}`);
+    };
+    panelesLocales.set(socket.id, data);
+    console.log(`🧩 Panel local registrado: ${panelData.panelId || socket.id}`);
   });
 
-  // === Sincronización periódica desde panel local ===
+  // ======================
+  // 🔄 Sincronización periódica desde panel local
+  // ======================
   socket.on("syncPanel", (data) => {
     if (!data) return;
     panelesLocales.set(socket.id, {
       ...data,
       ultimaSync: new Date().toISOString(),
     });
-    console.log(`🔄 Sync recibida del panel: ${data.nombre} (${data.dispositivos} dispositivos)`);
+    console.log(
+      `🔁 Sync recibida desde panel "${data.nombre}" (${data.dispositivos} dispositivos)`
+    );
   });
 
-  // === Desconexión ===
+  // ======================
+  // 💬 Mensaje global (opcional)
+  // ======================
+  socket.on("broadcastMessage", (msg) => {
+    console.log(`💬 Broadcast recibido desde panel: ${msg}`);
+    io.emit("remoteMessage", msg);
+  });
+
+  // ======================
+  // ❌ Desconexión
+  // ======================
   socket.on("disconnect", () => {
     if (androidClients.has(socket.id)) {
       const c = androidClients.get(socket.id);
@@ -102,22 +128,26 @@ io.on("connection", (socket) => {
 // ============================
 // 🌍 Endpoints HTTP
 // ============================
-app.get("/", (_, res) => res.send("🟢 Servidor Render Cloud activo."));
-app.get("/api/ping", (_, res) => res.json({ status: "ok" }));
+app.get("/", (_, res) => res.send("🟢 Render Cloud activo y listo."));
+app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
 
+// Lista de dispositivos Android
 app.get("/api/dispositivos", (_, res) => {
   res.json(Array.from(androidClients.values()));
 });
 
+// Lista de paneles conectados
 app.get("/api/paneles", (_, res) => {
   res.json(Array.from(panelesLocales.values()));
 });
 
 // ============================
-// 🚀 Inicializar servidor Render
+// 🚀 Inicialización del servidor Render
 // ============================
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`☁️ Render Backend escuchando en puerto ${PORT}`);
-  console.log("✅ Listo para recibir Android clients y paneles locales.");
+  console.log("======================================");
+  console.log(`☁️  Servidor Render escuchando en puerto ${PORT}`);
+  console.log("✅  Listo para recibir Android Clients y Paneles Locales");
+  console.log("======================================");
 });
