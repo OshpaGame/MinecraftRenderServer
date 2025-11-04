@@ -131,10 +131,9 @@ app.get("/api/paneles", (_, res) => {
 // 🔑 VALIDACIÓN DE LICENCIAS
 // ============================
 const licPath = path.join(__dirname, "data", "licenses.json");
+const licPrefixedPath = path.join(__dirname, "data", "licenses_prefixed.json");
 
-/**
- * GET /api/licencias — debug opcional
- */
+// 🔍 Listar licencias para debug
 app.get("/api/licencias", (_, res) => {
   try {
     const list = JSON.parse(fs.readFileSync(licPath, "utf8"));
@@ -144,10 +143,7 @@ app.get("/api/licencias", (_, res) => {
   }
 });
 
-/**
- * POST /api/validate-key — valida y registra el uso
- * Body: { key: "...", deviceId?: "...", nombre?: "...", modelo?: "..." }
- */
+// ✅ Validar una clave
 app.post("/api/validate-key", (req, res) => {
   try {
     const key = req.body.key?.trim();
@@ -164,8 +160,6 @@ app.post("/api/validate-key", (req, res) => {
     }
 
     const licencias = JSON.parse(fs.readFileSync(licPath, "utf8"));
-
-    // Buscar licencia por clave
     const licencia = licencias.find((l) => l.key === key || l === key);
 
     if (!licencia) {
@@ -173,7 +167,6 @@ app.post("/api/validate-key", (req, res) => {
       return res.status(403).json({ valid: false, error: "Clave no válida" });
     }
 
-    // Si la licencia ya está usada por otro device
     if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId) {
       console.log(⚠ Clave ${key} ya está en uso por otro dispositivo (${licencia.deviceId}).);
       return res.status(409).json({
@@ -182,16 +175,13 @@ app.post("/api/validate-key", (req, res) => {
       });
     }
 
-    // Marcar licencia como usada
     licencia.usada = true;
     licencia.deviceId = deviceId;
     licencia.nombre = nombre;
     licencia.modelo = modelo;
     licencia.fechaUso = new Date().toISOString();
 
-    // Guardar cambios
     fs.writeFileSync(licPath, JSON.stringify(licencias, null, 2));
-
     console.log(🔑 Licencia válida usada: ${key} por ${nombre} (${deviceId}));
 
     return res.json({
@@ -204,6 +194,33 @@ app.post("/api/validate-key", (req, res) => {
   } catch (err) {
     console.error("⚠ Error validando licencia:", err);
     return res.status(500).json({ valid: false, error: "Error interno del servidor" });
+  }
+});
+
+// ============================
+// 🎟 Entregar una licencia libre automáticamente
+// ============================
+app.get("/api/get-license", (req, res) => {
+  try {
+    if (!fs.existsSync(licPrefixedPath)) {
+      return res.status(500).json({ error: "Archivo de licencias no encontrado" });
+    }
+
+    const licencias = JSON.parse(fs.readFileSync(licPrefixedPath, "utf8"));
+    const libre = licencias.find((l) => !l.usada);
+
+    if (!libre) {
+      return res.status(404).json({ error: "No hay licencias disponibles" });
+    }
+
+    libre.usada = true;
+    fs.writeFileSync(licPrefixedPath, JSON.stringify(licencias, null, 2));
+
+    console.log(🎫 Licencia entregada: ${libre.key});
+    res.json({ key: libre.key, status: "ok" });
+  } catch (err) {
+    console.error("⚠ Error en /api/get-license:", err);
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 });
 
