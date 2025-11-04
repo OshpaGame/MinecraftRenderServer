@@ -148,7 +148,7 @@ app.get("/api/paneles", (_, res) => {
 // ============================
 // 🔑 VALIDACIÓN DE LICENCIAS (API para Android)
 // ============================
-const licPath = path.join(__dirname, 'data', 'licensias.json');
+const licPath = path.join(__dirname, 'data', 'licenses.json');
 
 /**
  * GET para debug opcional (no es necesario exponerlo público)
@@ -205,6 +205,7 @@ server.listen(PORT, () => {
   console.log("✅  Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
 
 
 
