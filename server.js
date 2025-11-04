@@ -65,6 +65,7 @@ io.on("connection", (socket) => {
       ip: cleanIp,
       estado: "online",
       ultimaConexion: new Date().toISOString(),
+      licencia: data.licencia || "-",
     };
 
     androidClients.set(socket.id, info);
@@ -89,7 +90,9 @@ io.on("connection", (socket) => {
       ...data,
       ultimaSync: new Date().toISOString(),
     });
-    console.log(`🔁 Sync recibida desde panel "${data.nombre}" (${data.dispositivos} dispositivos)`);
+    console.log(
+      `🔁 Sync recibida desde panel "${data.nombre}" (${data.dispositivos} dispositivos)`
+    );
     socket.emit("updateClientes", Array.from(androidClients.values()));
   });
 
@@ -135,6 +138,7 @@ app.get("/api/paneles", (_, res) => {
 // ============================
 const licPath = path.join(__dirname, "data", "licenses.json");
 const licPrefixedPath = path.join(__dirname, "data", "licenses_prefixed.json");
+const logPath = path.join(__dirname, "data", "licencias_usadas.json");
 
 // 🔍 Listar licencias (solo debug)
 app.get("/api/licencias", (_, res) => {
@@ -178,6 +182,7 @@ app.post("/api/validate-key", (req, res) => {
       });
     }
 
+    // Marcar licencia como usada
     licencia.usada = true;
     licencia.deviceId = deviceId;
     licencia.nombre = nombre;
@@ -187,42 +192,36 @@ app.post("/api/validate-key", (req, res) => {
     fs.writeFileSync(licPath, JSON.stringify(licencias, null, 2));
     console.log(`🔑 Licencia válida usada: ${key} por ${nombre} (${deviceId})`);
 
-// 🔄 Registrar este dispositivo en la lista global de androidClients
-const info = {
-  socketId: deviceId, // o un ID temporal si no está conectado por socket aún
-  deviceId: deviceId,
-  nombre: nombre,
-  modelo: modelo,
-  versionApp: "—",
-  ip: "Licencia validada desde API",
-  licencia: key,
-  estado: "autenticado",
-  ultimaConexion: new Date().toISOString(),
-};
+    // Registrar en lista global
+    const info = {
+      socketId: deviceId,
+      deviceId,
+      nombre,
+      modelo,
+      versionApp: "—",
+      ip: "Licencia validada desde API",
+      licencia: key,
+      estado: "autenticado",
+      ultimaConexion: new Date().toISOString(),
+    };
 
-// Guardar/actualizar en la lista global
-androidClients.set(deviceId, info);
+    androidClients.set(deviceId, info);
+    io.emit("updateClientes", Array.from(androidClients.values()));
 
-// 🔔 Notificar a todos los paneles conectados
-io.emit("updateClientes", Array.from(androidClients.values()));
+    // Guardar log histórico
+    let logs = [];
+    try { logs = JSON.parse(fs.readFileSync(logPath, "utf8")); } catch {}
+    logs.push({ key, deviceId, nombre, modelo, fechaUso: new Date().toISOString() });
+    fs.writeFileSync(logPath, JSON.stringify(logs, null, 2));
 
-return res.json({
-  valid: true,
-  key,
-  status: "ok",
-  message: "Licencia válida",
-  deviceId,
-});
-
+    return res.json({ valid: true, key, status: "ok", message: "Licencia válida", deviceId });
   } catch (err) {
     console.error("⚠️ Error validando licencia:", err);
     return res.status(500).json({ valid: false, error: "Error interno del servidor" });
   }
 });
 
-// ============================
-// 🎟 Entregar una licencia libre automáticamente
-// ============================
+// 🎟 Entregar licencia libre automáticamente
 app.get("/api/get-license", (req, res) => {
   try {
     if (!fs.existsSync(licPrefixedPath)) {
@@ -232,9 +231,7 @@ app.get("/api/get-license", (req, res) => {
     const licencias = JSON.parse(fs.readFileSync(licPrefixedPath, "utf8"));
     const libre = licencias.find((l) => !l.usada);
 
-    if (!libre) {
-      return res.status(404).json({ error: "No hay licencias disponibles" });
-    }
+    if (!libre) return res.status(404).json({ error: "No hay licencias disponibles" });
 
     libre.usada = true;
     fs.writeFileSync(licPrefixedPath, JSON.stringify(licencias, null, 2));
@@ -247,9 +244,7 @@ app.get("/api/get-license", (req, res) => {
   }
 });
 
-// ============================
 // 🚀 Inicialización del servidor Render
-// ============================
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
@@ -257,4 +252,5 @@ server.listen(PORT, () => {
   console.log("✅ Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
 
