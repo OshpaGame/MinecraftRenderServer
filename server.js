@@ -31,7 +31,7 @@ let panelesLocales = new Map();
 function broadcastClients() {
   const list = Array.from(androidClients.values());
   io.emit("updateClientes", list);
-  console.log(📡 Broadcast Render → ${list.length} dispositivo(s) activo(s).);
+  console.log(`📡 Broadcast Render → ${list.length} dispositivo(s) activo(s).`);
 }
 
 function sanitizeIp(ip) {
@@ -49,7 +49,7 @@ io.on("connection", (socket) => {
     "unknown";
   const cleanIp = sanitizeIp(ip);
 
-  console.log(🌍 Nueva conexión: ${socket.id} (${cleanIp}));
+  console.log(`🌍 Nueva conexión: ${socket.id} (${cleanIp})`);
 
   socket.on("connectDevice", (data) => {
     if (!data) return;
@@ -77,7 +77,7 @@ io.on("connection", (socket) => {
       ultimaSync: new Date().toISOString(),
     };
     panelesLocales.set(socket.id, data);
-    console.log(🧩 Panel local registrado: ${panelData.panelId || socket.id});
+    console.log(`🧩 Panel local registrado: ${panelData.panelId || socket.id}`);
   });
 
   socket.on("syncPanel", (data) => {
@@ -93,7 +93,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("broadcastMessage", (msg) => {
-    console.log(💬 Broadcast recibido: ${msg});
+    console.log(`💬 Broadcast recibido: ${msg}`);
     io.emit("remoteMessage", msg);
   });
 
@@ -102,7 +102,7 @@ io.on("connection", (socket) => {
       const c = androidClients.get(socket.id);
       c.estado = "offline";
       androidClients.delete(socket.id);
-      console.log(❌ Cliente Android desconectado: ${c.nombre} (${c.deviceId}));
+      console.log(`❌ Cliente Android desconectado: ${c.nombre} (${c.deviceId})`);
       broadcastClients();
     }
 
@@ -163,12 +163,12 @@ app.post("/api/validate-key", (req, res) => {
     const licencia = licencias.find((l) => l.key === key || l === key);
 
     if (!licencia) {
-      console.log(❌ Intento con clave inválida: ${key});
+      console.log(`❌ Intento con clave inválida: ${key}`);
       return res.status(403).json({ valid: false, error: "Clave no válida" });
     }
 
     if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId) {
-      console.log(⚠ Clave ${key} ya está en uso por otro dispositivo (${licencia.deviceId}).);
+      console.log(`⚠ Clave ${key} ya está en uso por otro dispositivo (${licencia.deviceId}).`);
       return res.status(409).json({
         valid: false,
         error: "Esta licencia ya está activada en otro dispositivo.",
@@ -182,7 +182,7 @@ app.post("/api/validate-key", (req, res) => {
     licencia.fechaUso = new Date().toISOString();
 
     fs.writeFileSync(licPath, JSON.stringify(licencias, null, 2));
-    console.log(🔑 Licencia válida usada: ${key} por ${nombre} (${deviceId}));
+    console.log(`🔑 Licencia válida usada: ${key} por ${nombre} (${deviceId})`);
 
     return res.json({
       valid: true,
@@ -216,7 +216,7 @@ app.get("/api/get-license", (req, res) => {
     libre.usada = true;
     fs.writeFileSync(licPrefixedPath, JSON.stringify(licencias, null, 2));
 
-    console.log(🎫 Licencia entregada: ${libre.key});
+    console.log(`🎫 Licencia entregada: ${libre.key}`);
     res.json({ key: libre.key, status: "ok" });
   } catch (err) {
     console.error("⚠ Error en /api/get-license:", err);
@@ -230,7 +230,8 @@ app.get("/api/get-license", (req, res) => {
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
-  console.log(☁  Servidor Render escuchando en puerto ${PORT});
+  console.log(`☁  Servidor Render escuchando en puerto ${PORT}`);
   console.log("✅  Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
