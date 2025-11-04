@@ -40,7 +40,7 @@ function sanitizeIp(ip) {
 }
 
 // ============================
-// ⚙ Eventos principales Socket.IO
+// ⚙️ Eventos principales Socket.IO
 // ============================
 io.on("connection", (socket) => {
   const ip =
@@ -51,13 +51,14 @@ io.on("connection", (socket) => {
 
   console.log(`🌍 Nueva conexión: ${socket.id} (${cleanIp})`);
 
+  // 📱 Registro de cliente Android
   socket.on("connectDevice", (data) => {
     if (!data) return;
     console.log("📱 Cliente Android conectado a Render:", data);
 
     const info = {
       socketId: socket.id,
-      deviceId: data.deviceId || unknown-${socket.id},
+      deviceId: data.deviceId || `unknown-${socket.id}`,
       nombre: data.nombre || "Desconocido",
       modelo: data.modelo || "—",
       versionApp: data.versionApp || "—",
@@ -70,6 +71,7 @@ io.on("connection", (socket) => {
     broadcastClients();
   });
 
+  // 🧠 Registro de panel maestro local
   socket.on("registerPanel", (panelData) => {
     const data = {
       ...panelData,
@@ -80,23 +82,24 @@ io.on("connection", (socket) => {
     console.log(`🧩 Panel local registrado: ${panelData.panelId || socket.id}`);
   });
 
+  // 🔁 Sincronización periódica desde panel local
   socket.on("syncPanel", (data) => {
     if (!data) return;
     panelesLocales.set(socket.id, {
       ...data,
       ultimaSync: new Date().toISOString(),
     });
-    console.log(
-      🔁 Sync recibida desde panel "${data.nombre}" (${data.dispositivos} dispositivos)
-    );
+    console.log(`🔁 Sync recibida desde panel "${data.nombre}" (${data.dispositivos} dispositivos)`);
     socket.emit("updateClientes", Array.from(androidClients.values()));
   });
 
+  // 💬 Broadcast global
   socket.on("broadcastMessage", (msg) => {
     console.log(`💬 Broadcast recibido: ${msg}`);
     io.emit("remoteMessage", msg);
   });
 
+  // ❌ Desconexión
   socket.on("disconnect", () => {
     if (androidClients.has(socket.id)) {
       const c = androidClients.get(socket.id);
@@ -107,7 +110,7 @@ io.on("connection", (socket) => {
     }
 
     if (panelesLocales.has(socket.id)) {
-      console.log(⚠ Panel local desconectado: ${socket.id});
+      console.log(`⚠️ Panel local desconectado: ${socket.id}`);
       panelesLocales.delete(socket.id);
     }
   });
@@ -133,7 +136,7 @@ app.get("/api/paneles", (_, res) => {
 const licPath = path.join(__dirname, "data", "licenses.json");
 const licPrefixedPath = path.join(__dirname, "data", "licenses_prefixed.json");
 
-// 🔍 Listar licencias para debug
+// 🔍 Listar licencias (solo debug)
 app.get("/api/licencias", (_, res) => {
   try {
     const list = JSON.parse(fs.readFileSync(licPath, "utf8"));
@@ -168,7 +171,7 @@ app.post("/api/validate-key", (req, res) => {
     }
 
     if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId) {
-      console.log(`⚠ Clave ${key} ya está en uso por otro dispositivo (${licencia.deviceId}).`);
+      console.log(`⚠️ Clave ${key} ya está en uso por otro dispositivo (${licencia.deviceId}).`);
       return res.status(409).json({
         valid: false,
         error: "Esta licencia ya está activada en otro dispositivo.",
@@ -192,7 +195,7 @@ app.post("/api/validate-key", (req, res) => {
       deviceId,
     });
   } catch (err) {
-    console.error("⚠ Error validando licencia:", err);
+    console.error("⚠️ Error validando licencia:", err);
     return res.status(500).json({ valid: false, error: "Error interno del servidor" });
   }
 });
@@ -219,7 +222,7 @@ app.get("/api/get-license", (req, res) => {
     console.log(`🎫 Licencia entregada: ${libre.key}`);
     res.json({ key: libre.key, status: "ok" });
   } catch (err) {
-    console.error("⚠ Error en /api/get-license:", err);
+    console.error("⚠️ Error en /api/get-license:", err);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 });
@@ -230,8 +233,7 @@ app.get("/api/get-license", (req, res) => {
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
-  console.log(`☁  Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅  Listo para recibir Android Clients y Paneles Locales");
+  console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
+  console.log("✅ Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
-
