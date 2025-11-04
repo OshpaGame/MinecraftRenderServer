@@ -187,13 +187,33 @@ app.post("/api/validate-key", (req, res) => {
     fs.writeFileSync(licPath, JSON.stringify(licencias, null, 2));
     console.log(`🔑 Licencia válida usada: ${key} por ${nombre} (${deviceId})`);
 
-    return res.json({
-      valid: true,
-      key,
-      status: "ok",
-      message: "Licencia válida",
-      deviceId,
-    });
+// 🔄 Registrar este dispositivo en la lista global de androidClients
+const info = {
+  socketId: deviceId, // o un ID temporal si no está conectado por socket aún
+  deviceId: deviceId,
+  nombre: nombre,
+  modelo: modelo,
+  versionApp: "—",
+  ip: "Licencia validada desde API",
+  licencia: key,
+  estado: "autenticado",
+  ultimaConexion: new Date().toISOString(),
+};
+
+// Guardar/actualizar en la lista global
+androidClients.set(deviceId, info);
+
+// 🔔 Notificar a todos los paneles conectados
+io.emit("updateClientes", Array.from(androidClients.values()));
+
+return res.json({
+  valid: true,
+  key,
+  status: "ok",
+  message: "Licencia válida",
+  deviceId,
+});
+
   } catch (err) {
     console.error("⚠️ Error validando licencia:", err);
     return res.status(500).json({ valid: false, error: "Error interno del servidor" });
@@ -237,3 +257,4 @@ server.listen(PORT, () => {
   console.log("✅ Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
