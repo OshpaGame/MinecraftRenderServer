@@ -145,32 +145,53 @@ app.get("/api/paneles", (_, res) => {
   res.json(Array.from(panelesLocales.values()));
 });
 
-// ====== 🔑 LICENCIAS ONLINE ======
-const fs = require('fs');
-const path = require('path');
+// ============================
+// 🔑 VALIDACIÓN DE LICENCIAS (API para Android)
+// ============================
+const licPath = path.join(__dirname, 'data', 'licensias.json');
 
-const licFile = path.join(__dirname, 'data', 'licencias.json');
-
-// Cargar todas las keys
-function loadLicencias() {
+/**
+ * GET para debug opcional (no es necesario exponerlo público)
+ * Ejemplo: https://minecraft-render-server-4ps0.onrender.com/api/licencias
+ */
+app.get('/api/licencias', (_, res) => {
   try {
-    return JSON.parse(fs.readFileSync(licFile, 'utf8'));
-  } catch {
-    return [];
+    const list = JSON.parse(fs.readFileSync(licPath, 'utf8'));
+    res.json({ count: list.length, sample: list.slice(0, 3) });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al leer licencias', message: err.message });
   }
-}
+});
 
-// Validar una key
-app.get('/validar-key', (req, res) => {
-  const key = req.query.key;
-  if (!key) return res.status(400).json({ ok: false, error: 'Falta parámetro key' });
+/**
+ * POST /api/validate-key
+ * Valida una licencia enviada desde el cliente Android
+ * Body esperado: { "key": "ABC123..." }
+ */
+app.post('/api/validate-key', express.json(), (req, res) => {
+  try {
+    const key = req.body.key?.trim();
+    if (!key) {
+      return res.status(400).json({ valid: false, error: 'Falta la clave' });
+    }
 
-  const licencias = loadLicencias();
-  const found = licencias.find(l => l.key === key && l.activo);
-  if (found) {
-    return res.status(200).json({ ok: true, key });
-  } else {
-    return res.status(404).json({ ok: false, error: 'Key inválida o desactivada' });
+    if (!fs.existsSync(licPath)) {
+      return res.status(500).json({ valid: false, error: 'Archivo de licencias no encontrado' });
+    }
+
+    const licencias = JSON.parse(fs.readFileSync(licPath, 'utf8'));
+    const encontrada = licencias.find(l => l.key === key || l === key);
+
+    if (encontrada) {
+      console.log(🔑 Licencia válida usada: ${key});
+      return res.json({ valid: true, key, status: 'ok' });
+    } else {
+      console.log(❌ Intento con clave inválida: ${key});
+      return res.status(403).json({ valid: false, error: 'Clave no válida' });
+    }
+  } catch (err) {
+    console.error('⚠ Error validando licencia:', err);
+    return res.status(500).json({ valid: false, error: 'Error interno del servidor' });
   }
 });
 
@@ -184,4 +205,5 @@ server.listen(PORT, () => {
   console.log("✅  Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
 
