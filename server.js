@@ -14,7 +14,7 @@ const server = http.createServer(app);
 // ============================
 const io = socketIo(server, {
   cors: { origin: "*" },
-  allowEIO3: true, // compatibilidad con Android (socket.io-client 2.x)
+  allowEIO3: true, // compatibilidad Android (socket.io-client 2.x)
 });
 
 // ============================
@@ -24,12 +24,15 @@ let androidClients = new Map(); // Dispositivos Android conectados
 let panelesLocales = new Map(); // Paneles locales sincronizados
 
 // ============================
-// 🧩 Utilidades
+// 🧩 Funciones auxiliares
 // ============================
 function broadcastClients() {
   const list = Array.from(androidClients.values());
+
+  // 🔄 Enviar lista a todos (Render UI + Paneles locales)
   io.emit("updateClientes", list);
-  console.log(`📡 Render → Enviados ${list.length} dispositivo(s) activo(s).`);
+
+  console.log(`📡 Broadcast Render → ${list.length} dispositivo(s) activo(s).`);
 }
 
 function sanitizeIp(ip) {
@@ -68,7 +71,7 @@ io.on("connection", (socket) => {
     };
 
     androidClients.set(socket.id, info);
-    broadcastClients();
+    broadcastClients(); // 🔄 Enviar actualización a paneles locales
   });
 
   // ======================
@@ -96,13 +99,16 @@ io.on("connection", (socket) => {
     console.log(
       `🔁 Sync recibida desde panel "${data.nombre}" (${data.dispositivos} dispositivos)`
     );
+
+    // 🔄 Cuando un panel sincroniza, le enviamos los dispositivos activos
+    socket.emit("updateClientes", Array.from(androidClients.values()));
   });
 
   // ======================
-  // 💬 Mensaje global (opcional)
+  // 💬 Broadcast global opcional
   // ======================
   socket.on("broadcastMessage", (msg) => {
-    console.log(`💬 Broadcast recibido desde panel: ${msg}`);
+    console.log(`💬 Broadcast recibido: ${msg}`);
     io.emit("remoteMessage", msg);
   });
 
@@ -131,12 +137,10 @@ io.on("connection", (socket) => {
 app.get("/", (_, res) => res.send("🟢 Render Cloud activo y listo."));
 app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
 
-// Lista de dispositivos Android
 app.get("/api/dispositivos", (_, res) => {
   res.json(Array.from(androidClients.values()));
 });
 
-// Lista de paneles conectados
 app.get("/api/paneles", (_, res) => {
   res.json(Array.from(panelesLocales.values()));
 });
