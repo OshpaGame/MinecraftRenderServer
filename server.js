@@ -183,7 +183,7 @@ app.post('/api/validate-key', express.json(), (req, res) => {
     const encontrada = licencias.find(l => l.key === key || l === key);
 
     if (encontrada) {
-      console.log(🔑 Licencia válida usada: ${key});
+      console.log("🔑 Licencia válida usada: " + key);
       return res.json({ valid: true, key, status: 'ok' });
     } else {
       console.log(❌ Intento con clave inválida: ${key});
@@ -205,5 +205,6 @@ server.listen(PORT, () => {
   console.log("✅  Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
 
 
