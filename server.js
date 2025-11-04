@@ -1,111 +1,123 @@
-// server.js - Backend Render (conexión nube entre panel y apps Android)
+// server.js - Servidor Maestro Render Cloud (Minecraft Remote Panel)
 const express = require("express");
 const http = require("http");
-const socketIo = require("socket.io");
 const cors = require("cors");
+const socketIo = require("socket.io");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 const server = http.createServer(app);
+
+// ============================
+// 🔌 Configuración del socket.io
+// ============================
 const io = socketIo(server, {
   cors: { origin: "*" },
-  allowEIO3: true,
+  allowEIO3: true, // compatibilidad Android (socket.io-client 2.x)
 });
 
-const PORT = process.env.PORT || 3000;
+// ============================
+// 🗂️ Estructuras de datos
+// ============================
+let androidClients = new Map(); // Clientes Android conectados
+let panelesLocales = new Map(); // Paneles locales sincronizados
 
 // ============================
-// ESTADO DE PANEL Y CLIENTES
+// 🧩 Funciones auxiliares
 // ============================
-let panels = new Map();   // panelId -> info
-let clients = new Map();  // socketId -> info (app Android)
+function broadcastClients() {
+  const list = Array.from(androidClients.values());
+  io.emit("updateClientes", list);
+  console.log(`📡 Broadcast Render → ${list.length} dispositivos activos.`);
+}
 
 // ============================
-// SOCKET.IO - Render Global
+// 📱 Android Clients
 // ============================
 io.on("connection", (socket) => {
-  console.log(`🌐 Nueva conexión global (${socket.id})`);
+  const ip =
+    socket.handshake.headers["x-forwarded-for"] ||
+    socket.conn.remoteAddress?.replace(/^.*:/, "") ||
+    "unknown";
+  console.log(`🌍 Nueva conexión Socket: ${socket.id} (${ip})`);
 
-  // 🖥️ Panel Maestro se registra
-  socket.on("registerPanel", (data) => {
-    if (!data?.panelId) return;
-    panels.set(data.panelId, {
-      socketId: socket.id,
-      lastPing: new Date().toISOString(),
-    });
-    console.log(`✅ Panel registrado: ${data.panelId}`);
-    io.emit("updatePanels", Array.from(panels.keys()));
-  });
-
-  // 📱 Cliente Android se conecta a la nube
+  // === Registro de cliente Android ===
   socket.on("connectDevice", (data) => {
+    if (!data) return;
+    console.log("📱 Cliente Android conectado a Render:", data);
+
     const info = {
       socketId: socket.id,
-      deviceId: data?.deviceId || "unknown",
-      nombre: data?.nombre || "Sin nombre",
-      modelo: data?.modelo || "",
-      versionApp: data?.versionApp || "",
+      deviceId: data.deviceId || `unknown-${socket.id}`,
+      nombre: data.nombre || "Desconocido",
+      modelo: data.modelo || "—",
+      versionApp: data.versionApp || "—",
+      ip,
+      estado: "online",
       ultimaConexion: new Date().toISOString(),
     };
-    clients.set(socket.id, info);
-    console.log(`📲 Nuevo dispositivo: ${info.nombre} (${info.deviceId})`);
-    io.emit("updateClients", Array.from(clients.values()));
+
+    androidClients.set(socket.id, info);
+    broadcastClients();
   });
 
-  // 🔁 Relay de mensajes entre Panel y App
-  socket.on("relayMessage", (msg) => {
-    console.log("📨 Relay:", msg);
-    io.emit("remoteMessage", msg);
+  // === Registro de panel local ===
+  socket.on("registerPanel", (panelData) => {
+    panelesLocales.set(socket.id, {
+      ...panelData,
+      socketId: socket.id,
+      ultimaSync: new Date().toISOString(),
+    });
+    console.log(`🧠 Panel local sincronizado: ${panelData.panelId || socket.id}`);
   });
 
-  // Desconexión
+  // === Sincronización periódica desde panel local ===
+  socket.on("syncPanel", (data) => {
+    if (!data) return;
+    panelesLocales.set(socket.id, {
+      ...data,
+      ultimaSync: new Date().toISOString(),
+    });
+    console.log(`🔄 Sync recibida del panel: ${data.nombre} (${data.dispositivos} dispositivos)`);
+  });
+
+  // === Desconexión ===
   socket.on("disconnect", () => {
-    if (clients.has(socket.id)) {
-      const info = clients.get(socket.id);
-      console.log(`❌ Cliente desconectado: ${info.deviceId}`);
-      clients.delete(socket.id);
+    if (androidClients.has(socket.id)) {
+      const c = androidClients.get(socket.id);
+      c.estado = "offline";
+      androidClients.delete(socket.id);
+      console.log(`❌ Cliente Android desconectado: ${c.nombre} (${c.deviceId})`);
+      broadcastClients();
     }
-    for (const [id, p] of panels.entries()) {
-      if (p.socketId === socket.id) {
-        console.log(`⚠️ Panel desconectado: ${id}`);
-        panels.delete(id);
-      }
+
+    if (panelesLocales.has(socket.id)) {
+      console.log(`⚠️ Panel local desconectado: ${socket.id}`);
+      panelesLocales.delete(socket.id);
     }
-    io.emit("updateClients", Array.from(clients.values()));
-    io.emit("updatePanels", Array.from(panels.keys()));
   });
 });
 
 // ============================
-// API REST - Estado
+// 🌍 Endpoints HTTP
 // ============================
-app.get("/", (req, res) => {
-  res.send("🌐 Render Backend activo ✅");
+app.get("/", (_, res) => res.send("🟢 Servidor Render Cloud activo."));
+app.get("/api/ping", (_, res) => res.json({ status: "ok" }));
+
+app.get("/api/dispositivos", (_, res) => {
+  res.json(Array.from(androidClients.values()));
 });
 
-// Ping desde paneles locales
-app.post("/api/ping", (req, res) => {
-  const { id, source, devices, status, timestamp } = req.body || {};
-  if (id) {
-    panels.set(id, { lastPing: timestamp, devices, status });
-    console.log(`☁️ Ping recibido de ${id}: ${devices} dispositivos`);
-  }
-  res.json({ ok: true });
-});
-
-// Ver estado de paneles y clientes
-app.get("/status", (req, res) => {
-  res.json({
-    panels: Object.fromEntries(panels),
-    clients: Array.from(clients.values()),
-  });
+app.get("/api/paneles", (_, res) => {
+  res.json(Array.from(panelesLocales.values()));
 });
 
 // ============================
-// INICIO DEL SERVIDOR
+// 🚀 Inicializar servidor Render
 // ============================
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`🚀 Render Backend escuchando en puerto ${PORT}`);
+  console.log(`☁️ Render Backend escuchando en puerto ${PORT}`);
+  console.log("✅ Listo para recibir Android clients y paneles locales.");
 });
