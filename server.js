@@ -145,6 +145,35 @@ app.get("/api/paneles", (_, res) => {
   res.json(Array.from(panelesLocales.values()));
 });
 
+// ====== 🔑 LICENCIAS ONLINE ======
+const fs = require('fs');
+const path = require('path');
+
+const licFile = path.join(__dirname, 'data', 'licencias.json');
+
+// Cargar todas las keys
+function loadLicencias() {
+  try {
+    return JSON.parse(fs.readFileSync(licFile, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+// Validar una key
+app.get('/validar-key', (req, res) => {
+  const key = req.query.key;
+  if (!key) return res.status(400).json({ ok: false, error: 'Falta parámetro key' });
+
+  const licencias = loadLicencias();
+  const found = licencias.find(l => l.key === key && l.activo);
+  if (found) {
+    return res.status(200).json({ ok: true, key });
+  } else {
+    return res.status(404).json({ ok: false, error: 'Key inválida o desactivada' });
+  }
+});
+
 // ============================
 // 🚀 Inicialización del servidor Render
 // ============================
@@ -155,3 +184,4 @@ server.listen(PORT, () => {
   console.log("✅  Listo para recibir Android Clients y Paneles Locales");
   console.log("======================================");
 });
+
