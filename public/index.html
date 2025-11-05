@@ -5,34 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gestor de Servidores por Licencia</title>
   <style>
-    body { font-family: Arial; background: #0e0e0e; color: #00ffaa; text-align: center; padding: 20px; }
-    input, select { padding: 6px; border-radius: 6px; border: none; margin: 5px; }
-    button { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; }
-    table { width: 90%; margin: 20px auto; background: #151515; color: #fff; border-radius: 8px; }
-    th, td { padding: 8px; border-bottom: 1px solid #333; }
-    .btn { background: #00c28a; color: white; }
-    .del { background: #ff5555; color: white; }
+    body { font-family: Arial; background: #0e0e0e; color: #eee; padding: 20px; }
+    h1, h2 { color: #00ffaa; }
+    input, select { padding: 8px; border-radius: 6px; border: none; margin: 6px; width: min(500px, 90%); }
+    button { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; background: #00c28a; color: #fff; }
+    table { width: 100%; margin: 20px 0; background: #151515; color: #fff; border-radius: 8px; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid #2b2b2b; }
+    a { color: #00ffaa; }
   </style>
 </head>
 <body>
   <h1>☁️ Gestor de Servidores por Licencia</h1>
 
+  <h2>➕ Agregar servidor</h2>
   <div>
     <input id="srvName" placeholder="Nombre del servidor" />
     <input id="srvUrl" placeholder="URL del .zip" />
-    <button class="btn" onclick="addServer()">Agregar Servidor</button>
+    <button onclick="addServer()">Agregar</button>
   </div>
 
+  <h2>📋 Servidores registrados</h2>
   <table>
-    <thead><tr><th>Nombre</th><th>URL</th><th>Acción</th></tr></thead>
+    <thead><tr><th>Nombre</th><th>URL</th></tr></thead>
     <tbody id="servers"></tbody>
   </table>
 
-  <h2>🎫 Asignar servidor a licencia</h2>
+  <h2>🔗 Asignar servidor a licencia</h2>
   <div>
-    <input id="license" placeholder="Licencia del Android" />
+    <input id="license" placeholder="Licencia (exacta)" />
     <select id="serverSelect"></select>
-    <button class="btn" onclick="assignServer()">Enviar servidor</button>
+    <button onclick="assignServer()">Asignar y enviar</button>
   </div>
 
   <script>
@@ -43,35 +45,39 @@
       const select = document.getElementById("serverSelect");
       table.innerHTML = "";
       select.innerHTML = "";
+
       list.forEach(s => {
-        table.innerHTML += `<tr><td>${s.name}</td><td><a href="${s.url}" target="_blank">Abrir</a></td><td></td></tr>`;
+        table.innerHTML += `<tr><td>${s.name}</td><td><a href="${s.url}" target="_blank">${s.url}</a></td></tr>`;
         select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
       });
     }
 
     async function addServer() {
-      const name = document.getElementById("srvName").value;
-      const url = document.getElementById("srvUrl").value;
-      if (!name || !url) return alert("Completa los campos");
+      const name = document.getElementById("srvName").value.trim();
+      const url = document.getElementById("srvUrl").value.trim();
+      if (!name || !url) return alert("Completa nombre y URL");
       await fetch("/api/servers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, url })
       });
-      loadServers();
+      await loadServers();
       alert("Servidor agregado ✅");
     }
 
     async function assignServer() {
-      const license = document.getElementById("license").value;
+      const license = document.getElementById("license").value.trim();
       const serverId = parseInt(document.getElementById("serverSelect").value);
       if (!license) return alert("Ingresa la licencia");
-      await fetch("/api/assign", {
+
+      const r = await fetch("/api/assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ license, serverId })
       });
-      alert("Servidor asignado y enviado ✅");
+      const j = await r.json();
+      if (j.success) alert("Asignado y enviado ✅");
+      else alert("Error: " + (j.error || "desconocido"));
     }
 
     loadServers();
