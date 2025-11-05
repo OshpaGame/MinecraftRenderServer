@@ -1,179 +1,131 @@
-// server.js — Servidor Render Cloud (Minecraft Remote Panel)
+// server.js — Panel Maestro con asignación por licencia
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
-const socketIo = require("socket.io");
 const fs = require("fs");
 const path = require("path");
-const multer = require("multer");
+const socketIo = require("socket.io");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static("public"));
 const server = http.createServer(app);
 
-// ============================
-// 🔌 Configuración Socket.IO
-// ============================
-const io = socketIo(server, {
-  cors: { origin: "*" },
-  allowEIO3: true, // compatibilidad Android (socket.io-client 2.x)
-});
+const io = socketIo(server, { cors: { origin: "*" }, allowEIO3: true });
 
-// ============================
-// 🗂 Estructuras en memoria
-// ============================
+// === Archivos de datos ===
+const dataDir = path.join(__dirname, "data");
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+
+const serversPath = path.join(dataDir, "servers.json");
+const licensesPath = path.join(dataDir, "licenses.json");
+
+if (!fs.existsSync(serversPath)) fs.writeFileSync(serversPath, "[]");
+if (!fs.existsSync(licensesPath)) fs.writeFileSync(licensesPath, "[]");
+
 let androidClients = new Map();
-let panelesLocales = new Map();
 
-// ============================
-// ⚙️ Funciones auxiliares
-// ============================
-function broadcastClients() {
-  const list = Array.from(androidClients.values());
-  io.emit("updateClientes", list);
-  console.log(`📡 Enviando lista a todos los clientes (${list.length} activos).`);
-}
+// === Cargar datos ===
+const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+const saveJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2));
 
-function sanitizeIp(ip) {
-  if (!ip) return "unknown";
-  return ip.replace(/^::ffff:/, "").replace("::1", "localhost");
-}
-
-// ============================
-// 📦 Configuración de almacenamiento (uploads)
-// ============================
-const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-
-const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, uploadDir),
-  filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-});
-const upload = multer({ storage });
-
-// ============================
-// ⚙️ Eventos Socket.IO
-// ============================
+// === Socket.IO ===
 io.on("connection", (socket) => {
-  const ip = socket.handshake.headers["x-forwarded-for"] || socket.conn.remoteAddress;
-  const cleanIp = sanitizeIp(ip);
-  console.log(`🌍 Nueva conexión: ${socket.id} (${cleanIp})`);
+  console.log("📡 Cliente conectado:", socket.id);
 
-  // 📱 Registro cliente Android
   socket.on("connectDevice", (data) => {
-    if (!data) return;
-    const info = {
+    if (!data || !data.licencia) return;
+    androidClients.set(socket.id, {
       socketId: socket.id,
-      deviceId: data.deviceId || `unknown-${socket.id}`,
+      licencia: data.licencia,
       nombre: data.nombre || "Desconocido",
       modelo: data.modelo || "—",
       versionApp: data.versionApp || "—",
-      licencia: data.licencia || "—",
-      ip: cleanIp,
       estado: "online",
-      ultimaConexion: new Date().toISOString(),
-    };
-    androidClients.set(socket.id, info);
-    console.log(`📲 Cliente conectado: ${info.nombre} (${info.deviceId})`);
-    broadcastClients();
+    });
+    console.log(`📱 Android conectado: ${data.nombre} (${data.licencia})`);
+    io.emit("updateClientes", Array.from(androidClients.values()));
   });
 
-  // 🧠 Registro de panel maestro local
-  socket.on("registerPanel", (panelData) => {
-    const data = {
-      ...panelData,
-      socketId: socket.id,
-      ultimaSync: new Date().toISOString(),
-    };
-    panelesLocales.set(socket.id, data);
-    console.log(`🧩 Panel local registrado: ${panelData.panelId || socket.id}`);
-  });
-
-  // 💾 Enviar servidor a un cliente Android específico
-  socket.on("enviarServidor", (payload) => {
-    const { targetId, url, nombre } = payload || {};
-    if (!targetId || !url) return;
-    const clientSocket = io.sockets.sockets.get(targetId);
-    if (clientSocket) {
-      clientSocket.emit("enviarServidor", { url, nombre });
-      console.log(`📦 Servidor enviado a ${targetId}: ${nombre}`);
-    } else {
-      console.log(`⚠️ Cliente ${targetId} no encontrado`);
-    }
-  });
-
-  // ❌ Desconexión
   socket.on("disconnect", () => {
-    if (androidClients.has(socket.id)) {
-      const c = androidClients.get(socket.id);
-      androidClients.delete(socket.id);
-      console.log(`❌ Cliente Android desconectado: ${c.nombre}`);
-      broadcastClients();
-    }
-    if (panelesLocales.has(socket.id)) {
-      console.log(`⚠️ Panel local desconectado: ${socket.id}`);
-      panelesLocales.delete(socket.id);
-    }
+    androidClients.delete(socket.id);
+    io.emit("updateClientes", Array.from(androidClients.values()));
   });
 });
 
-// ============================
-// 🌍 Endpoints HTTP básicos
-// ============================
-app.get("/", (_, res) => res.send("🟢 Render Cloud activo y listo."));
-app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
+// === API de servidores ===
 
-app.get("/api/dispositivos", (_, res) =>
-  res.json(Array.from(androidClients.values()))
-);
+// 📋 Listar servidores
+app.get("/api/servers", (_, res) => res.json(readJson(serversPath)));
 
-app.get("/api/paneles", (_, res) =>
-  res.json(Array.from(panelesLocales.values()))
-);
+// ➕ Agregar servidor
+app.post("/api/servers", (req, res) => {
+  const { name, url } = req.body;
+  if (!name || !url)
+    return res.status(400).json({ error: "Faltan campos: name y url" });
 
-// ============================
-// 📤 Subida de servidores ZIP
-// ============================
-app.post("/api/upload", upload.single("file"), (req, res) => {
-  if (!req.file)
-    return res.status(400).json({ error: "No se subió ningún archivo." });
+  const servers = readJson(serversPath);
+  const nuevo = { id: Date.now(), name, url };
+  servers.push(nuevo);
+  saveJson(serversPath, servers);
 
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  console.log(`📦 Servidor subido: ${req.file.originalname}`);
-
-  res.json({
-    success: true,
-    url: fileUrl,
-    filename: req.file.filename,
-  });
+  console.log(`📦 Nuevo servidor registrado: ${name}`);
+  res.json({ success: true, servidor: nuevo });
 });
 
-// 🧠 Enviar un servidor subido a todos los dispositivos activos
-app.post("/api/send-server", (req, res) => {
-  const { url, nombre } = req.body;
-  if (!url || !nombre)
-    return res.status(400).json({ error: "Faltan parámetros." });
+// 🧩 Asignar servidor a una licencia
+app.post("/api/assign", (req, res) => {
+  const { license, serverId } = req.body;
+  if (!license || !serverId)
+    return res.status(400).json({ error: "Faltan datos" });
 
-  io.emit("enviarServidor", { url, nombre });
-  console.log(`📤 Broadcast de servidor: ${nombre}`);
-  res.json({ success: true });
+  const servers = readJson(serversPath);
+  const licenses = readJson(licensesPath);
+  const srv = servers.find((s) => s.id === serverId);
+  if (!srv) return res.status(404).json({ error: "Servidor no encontrado" });
+
+  let lic = licenses.find((l) => l.license === license);
+  if (!lic) {
+    lic = { license, assignedServer: srv };
+    licenses.push(lic);
+  } else {
+    lic.assignedServer = srv;
+  }
+
+  saveJson(licensesPath, licenses);
+
+  console.log(`🔗 Servidor '${srv.name}' asignado a licencia ${license}`);
+
+  // Si el dispositivo con esa licencia está conectado, se lo enviamos
+  for (const [_, c] of androidClients) {
+    if (c.licencia === license) {
+      io.to(c.socketId).emit("enviarServidor", {
+        url: srv.url,
+        nombre: srv.name,
+      });
+      console.log(`📤 Enviado servidor '${srv.name}' al Android ${license}`);
+    }
+  }
+
+  res.json({ success: true, license, servidor: srv });
 });
 
-// ============================
-// 📁 Servir archivos subidos
-// ============================
-app.use("/uploads", express.static(uploadDir));
+// 🧠 Obtener servidor asignado por licencia (para Android)
+app.get("/api/assigned/:license", (req, res) => {
+  const license = req.params.license;
+  const licenses = readJson(licensesPath);
+  const entry = licenses.find((l) => l.license === license);
+  if (!entry) return res.json({ assigned: null });
+  res.json({ assigned: entry.assignedServer });
+});
 
-// ============================
-// 🚀 Inicialización del servidor
-// ============================
+// 🚀
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
-  console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅ Listo para recibir Android Clients y Paneles Locales");
+  console.log(`☁️ Servidor Maestro en puerto ${PORT}`);
+  console.log("✅ Sistema de asignación por licencia activo.");
   console.log("======================================");
 });
-
 
