@@ -1,0 +1,171 @@
+/* === 🌌 Estilo global del Panel Maestro === */
+body {
+  font-family: Arial, sans-serif;
+  background: #0f0f0f;
+  color: #eaeaea;
+  text-align: center;
+  padding: 24px;
+  margin: 0;
+}
+
+/* === 🧠 Encabezados === */
+h1 {
+  color: #00ff88;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  margin-bottom: 20px;
+}
+
+h2 {
+  color: #00ff88;
+  font-size: 1.2rem;
+  margin-top: 0;
+}
+
+/* === 🧩 Secciones === */
+section,
+.panel {
+  background: #181818;
+  margin: 16px auto;
+  padding: 16px;
+  border-radius: 10px;
+  width: 92%;
+  max-width: 1100px;
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.08);
+  text-align: left;
+}
+
+/* === 🔘 Botones === */
+button {
+  background: #00ff88;
+  color: #000;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  margin: 6px;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  background: #00d976;
+  transform: scale(1.05);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+/* === 🧭 Navegación superior === */
+.nav {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+/* === 📋 Listas === */
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+li {
+  background: #222;
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+/* === 🏷️ Badges === */
+.badge {
+  background: #444;
+  color: #ddd;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* === 📊 Tablas === */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+th {
+  background: #151515;
+  color: #00ff88;
+  font-weight: 600;
+  padding: 10px;
+}
+
+td {
+  padding: 10px;
+  border-bottom: 1px solid #2b2b2b;
+  text-align: center;
+  word-break: break-word;
+}
+
+tr:hover {
+  background: rgba(0, 255, 136, 0.06);
+}
+
+/* === 🔵 Estados === */
+.online {
+  color: #00ff80;
+  font-weight: 600;
+}
+
+.offline {
+  color: #ff5252;
+  font-weight: 600;
+}
+
+.authed {
+  color: #00eaff;
+  font-weight: 600;
+}
+
+.unauth {
+  color: #999;
+}
+
+/* === 🧾 Formularios === */
+input {
+  background: #151515;
+  color: #eee;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  width: 240px;
+  outline: none;
+}
+
+input:focus {
+  border-color: #00ff88;
+  box-shadow: 0 0 6px rgba(0, 255, 136, 0.3);
+}
+
+/* === ⚙️ Detalles visuales === */
+.counter {
+  color: #00ffaa;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 25px;
+  font-size: 13px;
+  color: #999;
+  opacity: 0.8;
+}

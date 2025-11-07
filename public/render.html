@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <title>📱 Dispositivos conectados</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="style.css"/>
+
+  <style>
+    :root {
+      --color-bg: #0e0e0e;
+      --color-text: #f0f0f0;
+      --color-accent: #00ffaa;
+      --color-btn: #00c28a;
+      --color-btn-hover: #00e1a3;
+      --color-danger: #ff5252;
+      --color-danger-hover: #ff7373;
+      --color-card: #1a1a1a;
+      --color-border: #2b2b2b;
+    }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h1 {
+      color: var(--color-accent);
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .nav {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .nav button {
+      background: var(--color-btn);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+    .nav button:hover { background: var(--color-btn-hover); transform: scale(1.05); }
+
+    .header-actions {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    th {
+      background: var(--color-card);
+      color: var(--color-accent);
+      font-weight: 600;
+      padding: 10px;
+    }
+
+    td {
+      padding: 10px;
+      border-bottom: 1px solid var(--color-border);
+      text-align: center;
+      word-break: break-all;
+    }
+
+    tr:hover { background: rgba(0,255,170,0.05); }
+
+    .online { color: #00ff80; font-weight: 600; }
+    .offline { color: var(--color-danger); font-weight: 600; }
+    .authed { color: #00eaff; font-weight: 600; }
+    .unauth { color: #999; }
+
+    .footer {
+      text-align: center;
+      margin-top: 25px;
+      font-size: 13px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 Dispositivos conectados</h1>
+
+  <!-- 🔹 Navegación superior -->
+  <div class="nav">
+    <button onclick="window.location.href='index.html'">🏠 Panel principal</button>
+    <button onclick="window.location.href='gestor.html'">🧩 Gestor de servidores</button>
+  </div>
+
+  <!-- 🔹 Acciones -->
+  <div class="header-actions">
+    <button id="btnRefresh">🔄 Refrescar lista</button>
+  </div>
+
+  <!-- 🔹 Tabla de clientes -->
+  <table>
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Modelo</th>
+        <th>DeviceID</th>
+        <th>Versión App</th>
+        <th>IP</th>
+        <th>Licencia</th>
+        <th>Estado</th>
+        <th>Autenticado</th>
+        <th>Última conexión</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="9" style="color:#777; padding:12px;">Cargando...</td></tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Minecraft Render Server Dashboard © 2025
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const defaultLocal = "http://localhost:3000";
+    let api = location.origin;
+
+    // 🔧 Detectar entorno
+    if (location.origin.startsWith("file://") || !location.origin.includes("http")) {
+      api = localStorage.getItem("masterIP") || defaultLocal;
+      if (!api.startsWith("http")) api = "http://" + api;
+      console.log("⚙️ Cargando IP guardada:", api);
+    }
+
+    console.log("🌐 Conectando a:", api);
+    const socket = io(api, { transports: ["websocket"], reconnection: true });
+    const tbody = document.getElementById("tbody");
+
+    function render(list) {
+      tbody.innerHTML = "";
+      if (!list || !list.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="color:#777; padding:12px;">Sin dispositivos conectados</td></tr>';
+        return;
+      }
+
+      list.sort((a, b) => new Date(b.ultimaConexion) - new Date(a.ultimaConexion));
+
+      list.forEach(x => {
+        const estado = x.estado === "online"
+          ? '<span class="online">🟢 Online</span>'
+          : '<span class="offline">🔴 Offline</span>';
+        const auth = x.estado === "autenticado" || x.autenticado
+          ? '<span class="authed">✔️</span>'
+          : '<span class="unauth">✖</span>';
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${x.nombre || "-"}</td>
+          <td>${x.modelo || "-"}</td>
+          <td>${x.deviceId || "-"}</td>
+          <td>${x.versionApp || "-"}</td>
+          <td>${x.ip || "-"}</td>
+          <td>${x.licencia || "-"}</td>
+          <td>${estado}</td>
+          <td>${auth}</td>
+          <td>${new Date(x.ultimaConexion).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    socket.on("connect", () => {
+      console.log("✅ Conectado al servidor maestro");
+      socket.emit("getClientes");
+    });
+
+    socket.on("disconnect", () => {
+      console.warn("⚠️ Desconectado del servidor maestro");
+      tbody.innerHTML = '<tr><td colspan="9" style="color:#777; padding:12px;">Desconectado del servidor</td></tr>';
+    });
+
+    socket.on("updateClientes", list => {
+      console.log("📥 updateClientes recibido:", list);
+      render(list);
+    });
+
+    socket.on("clientesList", list => {
+      console.log("📥 clientesList recibido:", list);
+      render(list);
+    });
+
+    document.getElementById("btnRefresh").addEventListener("click", () => {
+      console.log("🔄 Solicitando lista de clientes...");
+      socket.emit("getClientes");
+    });
+  </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('✅ Service Worker registrado'))
+      .catch(err => console.error('❌ SW error:', err));
+  }
+  </script>
+</body>
+</html>

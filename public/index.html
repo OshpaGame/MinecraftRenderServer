@@ -1,40 +1,227 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Minecraft Render Cloud</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="/socket.io/socket.io.js"></script>
+  <meta charset="utf-8"/>
+  <title>Panel Maestro 🧠</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body {
+      background: #0e0e0e;
+      color: #f0f0f0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #00ffaa;
+      margin-bottom: 24px;
+    }
+    section {
+      background: #1b1b1b;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 10px rgba(0,255,170,0.08);
+    }
+    h2 {
+      color: #9ee5c1;
+      margin-top: 0;
+      font-size: 18px;
+    }
+    button {
+      background: #00c28a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      margin: 6px;
+      font-size: 15px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #00e1a3;
+      transform: scale(1.03);
+    }
+    .acciones button {
+      background: #555;
+      font-size: 13px;
+      padding: 6px 12px;
+    }
+    .acciones button:hover { background: #666; }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin-top: 10px;
+    }
+    li {
+      padding: 8px;
+      background: #121212;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      border: 1px solid #2b2b2b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    li b { color: #00ff99; }
+    .badge {
+      background: #ff5c5c;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .counter {
+      font-size: 15px;
+      color: #00ffaa;
+      margin-left: 10px;
+    }
+  </style>
 </head>
 <body>
-  <h1 class="title">Minecraft Remote Dashboard</h1>
+  <h1>Panel Maestro 🧠</h1>
 
-  <div class="status-card">
-    <div id="statusDot" class="dot"></div>
-    <span id="statusText">Desconectado</span>
-  </div>
-
-  <section id="info">
-    <p><strong>📱 Dispositivo:</strong> <span id="deviceName">—</span></p>
-    <p><strong>💻 IP:</strong> <span id="deviceIP">—</span></p>
-    <p><strong>🔑 Licencia:</strong> <span id="deviceLicense">—</span></p>
+  <!-- DASHBOARD -->
+  <section>
+    <h2>Dashboard principal</h2>
+    <p>Controla los dispositivos y gestiona los servidores desde aquí.</p>
+    <button id="btnOpenClients">📱 Ver dispositivos</button>
+    <button id="btnOpenServers">🧩 Gestor de servidores</button>
+    <span class="counter" id="clientCount">Clientes conectados: 0</span>
   </section>
 
-  <h2>Módulos Disponibles</h2>
-  <div class="buttons">
-    <button onclick="openModule('control')">🎮 Control Remoto</button>
-    <button onclick="openModule('render')">🖥️ Render Cloud</button>
-    <button onclick="openModule('files')">📁 Archivos</button>
-    <button onclick="openModule('gestor')">☁️ Gestor de Servidores</button>
-  </div>
+  <!-- LICENCIAS -->
+  <section id="licencias">
+    <h2>🔑 Licencias activas</h2>
+    <div class="acciones">
+      <button id="btnLicRefresh">🔄 Refrescar</button>
+      <button id="btnLicNew">➕ Generar key</button>
+    </div>
+    <ul id="licList"></ul>
+  </section>
 
-  <footer>
-    <button class="logout">🔒 Cerrar Sesión</button>
-  </footer>
+  <!-- SCRIPTS -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // ============================================================
+    // 🌐 COMPATIBILIDAD: Electron + Web
+    // ============================================================
+    let ipcRenderer = null;
+    try { ipcRenderer = require('electron').ipcRenderer; } catch {}
 
-  <div id="moduleContainer" class="hidden"></div>
+    // ==============================
+    // 🌐 DETECCIÓN AUTOMÁTICA DEL API
+    // ==============================
+    let api = location.origin;
+    const defaultLocal = "http://localhost:3000";
 
-  <script src="panel.js"></script>
+    if (location.origin.startsWith("file://") || !location.origin.includes("http")) {
+      api = localStorage.getItem("masterIP") || defaultLocal;
+      if (!api.startsWith("http")) api = "http://" + api;
+      console.log("⚙️ Cargando IP guardada o por defecto:", api);
+    }
+
+    console.log("🌐 Conectando al panel:", api);
+
+    // ==============================
+    // 🔌 CONEXIÓN SOCKET.IO
+    // ==============================
+    const socket = io(api, { transports: ['websocket'], reconnection: true });
+    const clientCount = document.getElementById('clientCount');
+
+    function updateClientCounter(list) {
+      if (!Array.isArray(list)) return;
+      const online = list.filter(x => x.estado === 'online').length;
+      clientCount.textContent = `Clientes conectados: ${online}`;
+    }
+
+    socket.on('connect', () => {
+      console.log("✅ Conectado al servidor maestro");
+      socket.emit('getClientes');
+    });
+
+    socket.on('clientesList', (list) => updateClientCounter(list));
+    socket.on('updateClientes', (list) => updateClientCounter(list));
+    socket.on('disconnect', () => clientCount.textContent = "Clientes conectados: 0");
+
+    // ==============================
+    // 🪟 VENTANAS SECUNDARIAS
+    // ==============================
+    document.getElementById('btnOpenClients').addEventListener('click', () => {
+      if (ipcRenderer) ipcRenderer.send('open-clients-window');
+      else window.location.href = 'render.html'; // web
+    });
+
+    document.getElementById('btnOpenServers').addEventListener('click', () => {
+      if (ipcRenderer) ipcRenderer.send('open-servers-window');
+      else window.location.href = 'gestor.html'; // web
+    });
+
+    // ==============================
+    // 🔑 LICENCIAS
+    // ==============================
+    async function loadLic() {
+      const ul = document.getElementById('licList');
+      ul.innerHTML = '<li class="muted">Cargando...</li>';
+      try {
+        const res = await fetch(api + '/api/licencias');
+        const json = await res.json();
+        const data = json.data || [];
+        ul.innerHTML = '';
+        if (!data.length) {
+          ul.innerHTML = '<li class="muted">No hay licencias generadas aún.</li>';
+          return;
+        }
+        data.forEach(l => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div>
+              <b>${l.key}</b> — ${l.cliente || 'Sin nombre'}
+              ${l.activo === false ? '<span class="badge">revocada</span>' : ''}
+            </div>
+            <div>
+              <button onclick="revokeKey('${l.key}')">⛔ Revocar</button>
+            </div>`;
+          ul.appendChild(li);
+        });
+      } catch (e) {
+        console.error("❌ Error al cargar licencias:", e);
+        ul.innerHTML = '<li class="muted">Error al cargar licencias.</li>';
+      }
+    }
+
+    async function revokeKey(key) {
+      if (!confirm('¿Revocar la key ' + key + '?')) return;
+      await fetch(api + '/revoke-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      });
+      loadLic();
+    }
+
+    document.getElementById('btnLicRefresh').addEventListener('click', loadLic);
+    document.getElementById('btnLicNew').addEventListener('click', async () => {
+      const nombre = prompt('Nombre del cliente:');
+      if (!nombre) return;
+      await fetch(api + '/crearLicencia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre })
+      });
+      loadLic();
+    });
+
+    loadLic();
+  </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('✅ Service Worker registrado'))
+      .catch(err => console.error('❌ SW error:', err));
+  }
+  </script>
+
 </body>
 </html>

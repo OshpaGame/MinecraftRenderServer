@@ -1,0 +1,25 @@
+[
+  {
+    "socketId": "Eh8Jzf0Np33caux6AAAB",
+    "deviceId": "283abaa943151829",
+    "nombre": "realme RMX3370",
+    "modelo": "realme RMX3370",
+    "versionApp": "1.0-debug",
+    "ip": "192.168.40.153",
+    "estado": "online",
+    "ultimaConexion": "2025-11-04T03:43:22.327Z",
+    "key": null
+  },
+  {
+    "socketId": "apBrlrRihPTiMbxjAAAJ",
+    "deviceId": "283abaa943151829",
+    "nombre": "Realme RMX3370",
+    "modelo": "REALME-RE879AL1 (RMX3370)",
+    "versionApp": "1.0-debug",
+    "ip": "192.168.40.153",
+    "estado": "online",
+    "ultimaConexion": "2025-11-04T11:59:08.311Z",
+    "key": null,
+    "origen": "local"
+  }
+]

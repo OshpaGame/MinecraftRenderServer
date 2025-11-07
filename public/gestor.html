@@ -1,86 +1,271 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestor de Servidores por Licencia</title>
+  <meta charset="utf-8"/>
+  <title>🧩 Gestor de servidores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="style.css"/>
+
   <style>
-    body { font-family: Arial; background: #0e0e0e; color: #eee; padding: 20px; }
-    h1, h2 { color: #00ffaa; }
-    input, select { padding: 8px; border-radius: 6px; border: none; margin: 6px; width: min(500px, 90%); }
-    button { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; background: #00c28a; color: #fff; }
-    table { width: 100%; margin: 20px 0; background: #151515; color: #fff; border-radius: 8px; border-collapse: collapse; }
-    th, td { padding: 10px; border-bottom: 1px solid #2b2b2b; }
-    a { color: #00ffaa; }
+    :root {
+      --color-bg: #0e0e0e;
+      --color-text: #f0f0f0;
+      --color-accent: #00ffaa;
+      --color-btn: #00c28a;
+      --color-btn-hover: #00e1a3;
+      --color-danger: #ff5252;
+      --color-danger-hover: #ff7373;
+      --color-card: #1a1a1a;
+      --color-border: #2b2b2b;
+    }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h1 {
+      color: var(--color-accent);
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .nav {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .nav button {
+      background: var(--color-btn);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+    .nav button:hover { background: var(--color-btn-hover); transform: scale(1.05); }
+
+    .panel {
+      background: var(--color-card);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,255,170,0.08);
+      margin-bottom: 25px;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      color: var(--color-accent);
+      font-size: 18px;
+    }
+
+    .input-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+
+    input {
+      background: #151515;
+      color: #eee;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      width: 240px;
+    }
+
+    button {
+      background: var(--color-btn);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      margin: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover { background: var(--color-btn-hover); transform: scale(1.03); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    th {
+      background: #121212;
+      color: var(--color-accent);
+      padding: 10px;
+    }
+
+    td {
+      padding: 8px;
+      border-bottom: 1px solid var(--color-border);
+      text-align: center;
+      word-break: break-all;
+    }
+
+    tr:hover { background: rgba(0,255,170,0.05); }
+
+    .footer {
+      text-align: center;
+      margin-top: 25px;
+      font-size: 13px;
+      color: #999;
+    }
   </style>
 </head>
 <body>
-  <h1>☁️ Gestor de Servidores por Licencia</h1>
+  <h1>🧩 Gestor de servidores</h1>
 
-  <h2>➕ Agregar servidor</h2>
-  <div>
-    <input id="srvName" placeholder="Nombre del servidor" />
-    <input id="srvUrl" placeholder="URL del .zip" />
-    <button onclick="addServer()">Agregar</button>
+  <!-- 🔹 Navegación -->
+  <div class="nav">
+    <button onclick="window.location.href='index.html'">🏠 Panel principal</button>
+    <button onclick="window.location.href='render.html'">📱 Ver dispositivos</button>
   </div>
 
-  <h2>📋 Servidores registrados</h2>
-  <table>
-    <thead><tr><th>Nombre</th><th>URL</th></tr></thead>
-    <tbody id="servers"></tbody>
-  </table>
+  <!-- 🔹 Panel de registro -->
+  <div class="panel">
+    <h2>📦 Registrar nuevo servidor</h2>
+    <div class="input-row">
+      <input type="text" id="srvName" placeholder="Nombre del servidor">
+      <input type="text" id="srvUrl" placeholder="URL del servidor (zip o IP)">
+      <button id="btnAddServer">➕ Agregar</button>
+    </div>
+  </div>
 
-  <h2>🔗 Asignar servidor a licencia</h2>
-  <div>
-    <input id="license" placeholder="Licencia (exacta)" />
-    <select id="serverSelect"></select>
-    <button onclick="assignServer()">Asignar y enviar</button>
+  <!-- 🔹 Tabla de servidores -->
+  <div class="panel">
+    <h2>📋 Lista de servidores</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>URL</th>
+          <th>Asignar a licencia</th>
+        </tr>
+      </thead>
+      <tbody id="srvTable">
+        <tr><td colspan="4" style="color:#777;">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Minecraft Render Server Dashboard © 2025
   </div>
 
   <script>
-    async function loadServers() {
-      const res = await fetch("/api/servers");
-      const list = await res.json();
-      const table = document.getElementById("servers");
-      const select = document.getElementById("serverSelect");
-      table.innerHTML = "";
-      select.innerHTML = "";
+    const defaultLocal = "http://localhost:3000";
+    let api = location.origin;
 
-      list.forEach(s => {
-        table.innerHTML += `<tr><td>${s.name}</td><td><a href="${s.url}" target="_blank">${s.url}</a></td></tr>`;
-        select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-      });
+    // 🔧 Detección del entorno
+    if (location.origin.startsWith("file://") || !location.origin.includes("http")) {
+      api = localStorage.getItem("masterIP") || defaultLocal;
+      if (!api.startsWith("http")) api = "http://" + api;
+      console.log("⚙️ Cargando IP guardada:", api);
     }
 
-    async function addServer() {
+    console.log("🌐 Conectando a API:", api);
+
+    const srvTable = document.getElementById("srvTable");
+    const btnAdd = document.getElementById("btnAddServer");
+
+    async function loadServers() {
+      srvTable.innerHTML = '<tr><td colspan="4" style="color:#777;">Cargando...</td></tr>';
+      try {
+        const res = await fetch(api + "/api/servers");
+        const servers = await res.json();
+        srvTable.innerHTML = "";
+        if (!servers.length) {
+          srvTable.innerHTML = '<tr><td colspan="4" style="color:#777;">No hay servidores registrados aún</td></tr>';
+          return;
+        }
+        servers.forEach(s => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${s.id}</td>
+            <td>${s.name}</td>
+            <td><a href="${s.url}" target="_blank">${s.url}</a></td>
+            <td>
+              <button onclick="assignServerPrompt(${s.id})">🎯 Asignar</button>
+            </td>`;
+          srvTable.appendChild(tr);
+        });
+      } catch (e) {
+        console.error("❌ Error al cargar servidores:", e);
+        srvTable.innerHTML = '<tr><td colspan="4" style="color:#f55;">Error al cargar lista.</td></tr>';
+      }
+    }
+
+    btnAdd.addEventListener("click", async () => {
       const name = document.getElementById("srvName").value.trim();
       const url = document.getElementById("srvUrl").value.trim();
-      if (!name || !url) return alert("Completa nombre y URL");
-      await fetch("/api/servers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, url })
-      });
-      await loadServers();
-      alert("Servidor agregado ✅");
-    }
+      if (!name || !url) {
+        alert("⚠️ Debes ingresar nombre y URL del servidor.");
+        return;
+      }
 
-    async function assignServer() {
-      const license = document.getElementById("license").value.trim();
-      const serverId = parseInt(document.getElementById("serverSelect").value);
-      if (!license) return alert("Ingresa la licencia");
+      try {
+        const res = await fetch(api + "/api/servers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, url })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert("✅ Servidor agregado correctamente.");
+          document.getElementById("srvName").value = "";
+          document.getElementById("srvUrl").value = "";
+          loadServers();
+        } else {
+          alert("⚠️ Error: " + (data.error || "No se pudo agregar."));
+        }
+      } catch (err) {
+        alert("❌ Error al conectar con el servidor.");
+        console.error(err);
+      }
+    });
 
-      const r = await fetch("/api/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ license, serverId })
-      });
-      const j = await r.json();
-      if (j.success) alert("Asignado y enviado ✅");
-      else alert("Error: " + (j.error || "desconocido"));
+    async function assignServerPrompt(serverId) {
+      const license = prompt("Introduce la licencia a la que asignar este servidor:");
+      if (!license) return;
+      try {
+        const res = await fetch(api + "/api/assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ license, serverId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert("✅ Servidor asignado correctamente.");
+        } else {
+          alert("⚠️ Error: " + (data.error || "No se pudo asignar."));
+        }
+      } catch (err) {
+        alert("❌ Error de conexión.");
+      }
     }
 
     loadServers();
+  </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('✅ Service Worker registrado'))
+      .catch(err => console.error('❌ SW error:', err));
+  }
   </script>
 </body>
 </html>
