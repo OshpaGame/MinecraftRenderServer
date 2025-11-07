@@ -3,84 +3,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestor de Servidores por Licencia</title>
-  <style>
-    body { font-family: Arial; background: #0e0e0e; color: #eee; padding: 20px; }
-    h1, h2 { color: #00ffaa; }
-    input, select { padding: 8px; border-radius: 6px; border: none; margin: 6px; width: min(500px, 90%); }
-    button { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; background: #00c28a; color: #fff; }
-    table { width: 100%; margin: 20px 0; background: #151515; color: #fff; border-radius: 8px; border-collapse: collapse; }
-    th, td { padding: 10px; border-bottom: 1px solid #2b2b2b; }
-    a { color: #00ffaa; }
-  </style>
+  <title>Minecraft Render Cloud</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <h1>☁️ Gestor de Servidores por Licencia</h1>
+  <h1 class="title">Minecraft Remote Dashboard</h1>
 
-  <h2>➕ Agregar servidor</h2>
-  <div>
-    <input id="srvName" placeholder="Nombre del servidor" />
-    <input id="srvUrl" placeholder="URL del .zip" />
-    <button onclick="addServer()">Agregar</button>
+  <div class="status-card">
+    <div id="statusDot" class="dot"></div>
+    <span id="statusText">Desconectado</span>
   </div>
 
-  <h2>📋 Servidores registrados</h2>
-  <table>
-    <thead><tr><th>Nombre</th><th>URL</th></tr></thead>
-    <tbody id="servers"></tbody>
-  </table>
+  <section id="info">
+    <p><strong>📱 Dispositivo:</strong> <span id="deviceName">—</span></p>
+    <p><strong>💻 IP:</strong> <span id="deviceIP">—</span></p>
+    <p><strong>🔑 Licencia:</strong> <span id="deviceLicense">—</span></p>
+  </section>
 
-  <h2>🔗 Asignar servidor a licencia</h2>
-  <div>
-    <input id="license" placeholder="Licencia (exacta)" />
-    <select id="serverSelect"></select>
-    <button onclick="assignServer()">Asignar y enviar</button>
+  <h2>Módulos Disponibles</h2>
+  <div class="buttons">
+    <button onclick="openModule('control')">🎮 Control Remoto</button>
+    <button onclick="openModule('render')">🖥️ Render Cloud</button>
+    <button onclick="openModule('files')">📁 Archivos</button>
+    <button onclick="openModule('gestor')">☁️ Gestor de Servidores</button>
   </div>
 
-  <script>
-    async function loadServers() {
-      const res = await fetch("/api/servers");
-      const list = await res.json();
-      const table = document.getElementById("servers");
-      const select = document.getElementById("serverSelect");
-      table.innerHTML = "";
-      select.innerHTML = "";
+  <footer>
+    <button class="logout">🔒 Cerrar Sesión</button>
+  </footer>
 
-      list.forEach(s => {
-        table.innerHTML += `<tr><td>${s.name}</td><td><a href="${s.url}" target="_blank">${s.url}</a></td></tr>`;
-        select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-      });
-    }
+  <div id="moduleContainer" class="hidden"></div>
 
-    async function addServer() {
-      const name = document.getElementById("srvName").value.trim();
-      const url = document.getElementById("srvUrl").value.trim();
-      if (!name || !url) return alert("Completa nombre y URL");
-      await fetch("/api/servers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, url })
-      });
-      await loadServers();
-      alert("Servidor agregado ✅");
-    }
-
-    async function assignServer() {
-      const license = document.getElementById("license").value.trim();
-      const serverId = parseInt(document.getElementById("serverSelect").value);
-      if (!license) return alert("Ingresa la licencia");
-
-      const r = await fetch("/api/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ license, serverId })
-      });
-      const j = await r.json();
-      if (j.success) alert("Asignado y enviado ✅");
-      else alert("Error: " + (j.error || "desconocido"));
-    }
-
-    loadServers();
-  </script>
+  <script src="panel.js"></script>
 </body>
 </html>
