@@ -154,22 +154,17 @@
 
     function renderDevices(list = []) {
       const prevSelected = deviceSelect.value;
-
-      const onlineWithKey = list.filter(c =>
-        c.licencia && c.licencia !== "-" && c.licencia !== "sin clave"
-      ).sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
+      const onlineWithKey = list.filter(c => c.licencia && c.licencia !== "-" && c.licencia !== "sin clave")
+                                .sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
 
       deviceSelect.innerHTML = '<option value="">— Selecciona un dispositivo (licencia) —</option>';
       for (const c of onlineWithKey) {
-        const label = `${c.nombre || "Desconocido"} — ${c.licencia} (${c.modelo || "—"})`;
         const opt = document.createElement("option");
         opt.value = c.licencia;
-        opt.textContent = label;
+        opt.textContent = `${c.nombre || "Desconocido"} — ${c.licencia} (${c.modelo || "—"})`;
         deviceSelect.appendChild(opt);
       }
-      if (prevSelected && onlineWithKey.some(c => c.licencia === prevSelected)) {
-        deviceSelect.value = prevSelected;
-      }
+      if (prevSelected && onlineWithKey.some(c => c.licencia === prevSelected)) deviceSelect.value = prevSelected;
 
       devTable.innerHTML = "";
       if (!list.length) {
@@ -179,23 +174,20 @@
       }
 
       for (const c of list) {
-        const color =
-          c.estado === "online" ? "style='color:#00ffaa;'" :
-          c.estado === "autenticado" ? "style='color:#5be1ff;'" :
-          "style='color:#777;'";
-        const emoji =
-          c.estado === "online" ? "🟢" :
-          c.estado === "autenticado" ? "🔵" :
-          "⚫";
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${c.nombre || "—"}</td>
-          <td>${c.licencia || "-"}</td>
-          <td>${c.modelo || "—"}</td>
-          <td ${color}>${emoji} ${c.estado || "—"}</td>
-          <td>${c.ultimaConexion ? new Date(c.ultimaConexion).toLocaleString() : "—"}</td>
-        `;
-        devTable.appendChild(tr);
+        const color = c.estado === "online" ? "style='color:#00ffaa;'" :
+                      c.estado === "autenticado" ? "style='color:#5be1ff;'" :
+                      "style='color:#777;'";
+        const emoji = c.estado === "online" ? "🟢" :
+                      c.estado === "autenticado" ? "🔵" : "⚫";
+        devTable.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td>${c.nombre || "—"}</td>
+            <td>${c.licencia || "-"}</td>
+            <td>${c.modelo || "—"}</td>
+            <td ${color}>${emoji} ${c.estado || "—"}</td>
+            <td>${c.ultimaConexion ? new Date(c.ultimaConexion).toLocaleString() : "—"}</td>
+          </tr>
+        `);
       }
       devCount.textContent = list.length;
     }
@@ -211,27 +203,77 @@
           return;
         }
         servers.forEach(s => {
-          const tr = document.createElement("tr");
           const fileName = s.file ? s.file.split("/").pop() : "-";
-          tr.innerHTML = `
-            <td>${s.id}</td>
-            <td>${s.name}</td>
-            <td>${fileName}</td>
-            <td>${s.sizeMB || "—"}</td>
-            <td>${s.assignedCount || 0}</td>
-            <td>
-              <button onclick="downloadServer('${s.file}')">⬇️ Descargar</button>
-              <button onclick="assignServerPrompt(${s.id})">🎯 Asignar</button>
-              <button onclick="sendToSelected(${s.id})">📤 Enviar al dispositivo</button>
-              <button class="danger" onclick="deleteServer(${s.id})">🗑️ Eliminar</button>
-            </td>
-          `;
-          srvTable.appendChild(tr);
+          srvTable.insertAdjacentHTML("beforeend", `
+            <tr>
+              <td>${s.id}</td>
+              <td>${s.name}</td>
+              <td>${fileName}</td>
+              <td>${s.sizeMB || "—"}</td>
+              <td>${s.assignedCount || 0}</td>
+              <td>
+                <button onclick="downloadServer('${s.file}')">⬇️ Descargar</button>
+                <button onclick="assignServerPrompt(${s.id})">🎯 Asignar</button>
+                <button onclick="sendToSelected(${s.id})">📤 Enviar al dispositivo</button>
+                <button class="danger" onclick="deleteServer(${s.id})">🗑️ Eliminar</button>
+              </td>
+            </tr>
+          `);
         });
       } catch (e) {
         console.error("❌ Error al cargar servidores:", e);
         srvTable.innerHTML = '<tr><td colspan="6" style="color:#f55;">Error al cargar lista.</td></tr>';
       }
+    }
+
+    // 📤 Asignar servidor a licencia
+    async function assignServerPrompt(serverId) {
+      const license = prompt("Introduce la licencia a la que asignar este servidor:");
+      if (!license) return;
+      try {
+        const res = await fetch(api + "/api/assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ license, serverId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert("✅ " + (data.message || "Servidor asignado correctamente."));
+          loadServers();
+        } else {
+          alert("⚠️ Error: " + (data.error || "No se pudo asignar."));
+        }
+      } catch (err) {
+        console.error("❌ Error de conexión:", err);
+        alert("❌ Error de conexión con el servidor.");
+      }
+    }
+
+    // 📤 Enviar ZIP manualmente
+    function sendToSelected(serverId) {
+      const license = deviceSelect.value;
+      if (!license) return alert("Selecciona un dispositivo destino (licencia).");
+      fetch(api + "/api/sendToDevice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ license, serverId })
+      })
+      .then(r => r.json())
+      .then(data => alert(data.success ? "📤 Enviado al dispositivo" : "⚠️ " + (data.error || "No se pudo enviar.")))
+      .catch(()=> alert("❌ Error de conexión."));
+    }
+
+    function downloadServer(filePath) {
+      if (!filePath) return alert("Archivo no disponible.");
+      window.open(api + "/api/download?file=" + encodeURIComponent(filePath), "_blank");
+    }
+
+    async function deleteServer(id) {
+      if (!confirm("¿Seguro que deseas eliminar este servidor ZIP?")) return;
+      const res = await fetch(api + "/api/deleteServer/" + id, { method: "DELETE" });
+      const data = await res.json();
+      alert(data.success ? "🗑️ Servidor eliminado correctamente." : "⚠️ Error: " + (data.error || "No se pudo eliminar."));
+      loadServers();
     }
 
     document.getElementById("uploadForm").addEventListener("submit", async (e) => {
@@ -240,34 +282,24 @@
       const formData = new FormData(form);
       progressWrap.classList.remove("hidden");
       setProgress(0, "Preparando subida...");
-
       const xhr = new XMLHttpRequest();
       xhr.open("POST", api + "/api/servers", true);
-
       xhr.upload.onprogress = (evt) => {
-        if (evt.lengthComputable) {
-          const pct = Math.round((evt.loaded / evt.total) * 100);
-          setProgress(pct, `Subiendo... ${pct}%`);
-        }
+        if (evt.lengthComputable) setProgress(Math.round((evt.loaded / evt.total) * 100), `Subiendo...`);
       };
       xhr.onload = () => {
         try {
           const data = JSON.parse(xhr.responseText || "{}");
           if (xhr.status === 200 && data.success) {
             setProgress(100, "✅ Subida completa.");
-            form.reset();
-            loadServers();
-          } else {
-            setProgress(0, "⚠️ Error: " + (data.error || "No se pudo subir."));
-          }
-        } catch {
-          setProgress(0, "⚠️ Error inesperado de respuesta.");
-        }
+            form.reset(); loadServers();
+          } else setProgress(0, "⚠️ Error: " + (data.error || "No se pudo subir."));
+        } catch { setProgress(0, "⚠️ Error inesperado."); }
         setTimeout(()=>{ progressWrap.classList.add("hidden"); setProgress(0,"Listo."); },1500);
       };
       xhr.onerror = () => {
         setProgress(0, "❌ Error al conectar con el servidor.");
-        setTimeout(()=>{ progressWrap.classList.add("hidden"); setProgress(0,"Listo."); },1500);
+        setTimeout(()=>{ progressWrap.classList.add("hidden"); },1500);
       };
       xhr.send(formData);
     });
@@ -282,10 +314,9 @@
 
   <script>
   (function() {
-    const currentVersion = '2025-11-07v4';
+    const currentVersion = '2025-11-07v5';
     const key = 'gestor_html_version';
     const last = localStorage.getItem(key);
-
     if (last !== currentVersion) {
       localStorage.setItem(key, currentVersion);
       console.log('🧩 Nueva versión detectada — recargando sin caché...');
