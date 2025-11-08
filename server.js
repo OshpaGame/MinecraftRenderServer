@@ -1,4 +1,8 @@
-// server.js — Render Cloud + Panel Maestro (ZIP Upload + Refresco 3s + Delay 5s desconexión + Limpieza de licencias + Contador de licencias activas)
+// server.js — Render Cloud + Panel Maestro
+// ZIP Upload + Refresco 3s + Delay 5s desconexión
+// + Limpieza de licencias + Contador licencias activas
+// + /api/validate-key RESTAURADO (compat Android)
+// + Asignación envia {zip,url} para compatibilidad
 
 const express = require("express");
 const http = require("http");
@@ -42,8 +46,8 @@ const saveJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2));
 // ============================
 // 🔌 Mapas de conexión
 // ============================
-let androidClients = new Map();
-let socketToDevice = new Map();
+let androidClients = new Map();   // deviceId -> info
+let socketToDevice = new Map();   // socketId -> deviceId
 let panelesLocales = new Map();
 
 function broadcastClients() {
@@ -168,7 +172,7 @@ const upload = multer({
   },
 });
 
-// 📋 Listar servidores con contador de licencias
+// 📋 Listar servidores (con contador de licencias activas)
 app.get("/api/servers", (_, res) => {
   const servers = readJson(serversPath);
   const licencias = readJson(licPath);
@@ -183,6 +187,7 @@ app.get("/api/servers", (_, res) => {
   res.json(enriched);
 });
 
+// Subir servidor ZIP
 app.post("/api/servers", upload.single("serverZip"), (req, res) => {
   try {
     const { name } = req.body;
@@ -253,7 +258,78 @@ app.delete("/api/deleteServer/:id", (req, res) => {
 });
 
 // ============================
-// 🎯 Asignación de servidor
+// 🔑 VALIDAR LICENCIA (RESTABLECIDO)
+// ============================
+app.post("/api/validate-key", (req, res) => {
+  try {
+    const key = (req.body.key || "").trim();
+    const deviceId = (req.body.deviceId || "unknown").trim();
+    const nombre = req.body.nombre || "Sin nombre";
+    const modelo = req.body.modelo || "—";
+
+    if (!key) return res.status(400).json({ valid: false, error: "Falta la clave" });
+
+    const licencias = readJson(licPath);
+    let licencia = licencias.find((l) => (l.key || l) === key);
+    if (!licencia) {
+      console.log(`❌ Intento con clave inválida: ${key}`);
+      return res.status(403).json({ valid: false, error: "Clave no válida" });
+    }
+    if (typeof licencia === "string") licencia = { key: licencia };
+
+    if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId) {
+      console.log(`⚠️ Clave ${key} ya en uso por otro dispositivo.`);
+      return res.status(409).json({ valid: false, error: "Licencia ya activada en otro dispositivo." });
+    }
+
+    // marcar uso
+    licencia.usada = true;
+    licencia.deviceId = deviceId;
+    licencia.nombre = nombre;
+    licencia.modelo = modelo;
+    licencia.fechaUso = new Date().toISOString();
+
+    const idx = licencias.findIndex((l) => (l.key || l) === key);
+    licencias[idx] = licencia;
+    saveJson(licPath, licencias);
+
+    // actualizar mapa de clientes SIN duplicar
+    if (androidClients.has(deviceId)) {
+      const existing = androidClients.get(deviceId);
+      existing.licencia = key;
+      existing.estado = "autenticado";
+      existing.ultimaConexion = new Date().toISOString();
+      androidClients.set(deviceId, existing);
+    } else {
+      androidClients.set(deviceId, {
+        socketId: null,
+        deviceId,
+        nombre,
+        modelo,
+        versionApp: "—",
+        ip: "Licencia validada desde API",
+        licencia: key,
+        estado: "autenticado",
+        ultimaConexion: new Date().toISOString(),
+      });
+    }
+    broadcastClients();
+
+    // log
+    let logs = [];
+    try { logs = JSON.parse(fs.readFileSync(licLogPath, "utf8")); } catch {}
+    logs.push({ key, deviceId, nombre, modelo, fechaUso: new Date().toISOString() });
+    fs.writeFileSync(licLogPath, JSON.stringify(logs, null, 2));
+
+    res.json({ valid: true, key, status: "ok", message: "Licencia válida", deviceId });
+  } catch (err) {
+    console.error("⚠️ Error validando licencia:", err);
+    res.status(500).json({ valid: false, error: "Error interno del servidor" });
+  }
+});
+
+// ============================
+// 🎯 Asignación de servidor a licencia
 // ============================
 app.post("/api/assign", (req, res) => {
   const { license, serverId } = req.body || {};
@@ -273,14 +349,41 @@ app.post("/api/assign", (req, res) => {
   licencias[idx] = entry;
   saveJson(licPath, licencias);
 
+  // notificar en tiempo real (compat: mandamos zip y url)
   for (const [, c] of androidClients) {
     if ((c.licencia || c.key) === license && c.socketId) {
-      io.to(c.socketId).emit("enviarServidor", { zip: srv.file, nombre: srv.name });
+      io.to(c.socketId).emit("enviarServidor", {
+        zip: srv.file,
+        url: null,          // compat: antes se usaba url, ahora ZIP
+        nombre: srv.name,
+        sizeMB: srv.sizeMB
+      });
       console.log(`📤 ZIP '${srv.name}' enviado a ${c.nombre} (${license})`);
     }
   }
 
   res.json({ success: true, license, servidor: srv });
+});
+
+// Consultar servidor asignado a una licencia (compat: incluye zip y url)
+app.get("/api/assigned/:license", (req, res) => {
+  const license = req.params.license;
+  const licencias = readJson(licPath);
+  const entry = licencias.find((l) => (l.key || l.license || l) === license);
+  if (!entry || !entry.assignedServer) return res.json({ assigned: null });
+
+  // respuesta con compatibilidad
+  const srv = entry.assignedServer;
+  res.json({
+    assigned: {
+      id: srv.id,
+      name: srv.name,
+      zip: srv.file,
+      url: null,
+      sizeMB: srv.sizeMB,
+      download: `/api/download?file=${encodeURIComponent(srv.file)}`
+    }
+  });
 });
 
 // ============================
@@ -290,6 +393,6 @@ const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅ ZIP Upload + contador licencias + limpieza + delay 5s + refresco 3s OK");
+  console.log("✅ ZIP Upload + contador licencias + limpieza + validate-key + delay 5s + refresco 3s OK");
   console.log("======================================");
 });
