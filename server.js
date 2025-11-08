@@ -1,4 +1,4 @@
-// server.js — Render Cloud + Panel Maestro (FIX duplicados + refresco cada 3s + delay 5s desconexión)
+// server.js — Render Cloud + Panel Maestro (ZIP Upload + Refresco 3s + Delay 5s desconexión + Limpieza de licencias + Contador de licencias activas)
 
 const express = require("express");
 const http = require("http");
@@ -6,6 +6,7 @@ const cors = require("cors");
 const socketIo = require("socket.io");
 const fs = require("fs");
 const path = require("path");
+const multer = require("multer");
 
 const app = express();
 const server = http.createServer(app);
@@ -19,8 +20,14 @@ const io = socketIo(server, {
   allowEIO3: true,
 });
 
+// ============================
+// 📂 Directorios y JSON
+// ============================
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+
+const uploadsDir = path.join(dataDir, "servers_uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 const licPath = path.join(dataDir, "licenses.json");
 const serversPath = path.join(dataDir, "servers.json");
@@ -32,6 +39,9 @@ if (!fs.existsSync(serversPath)) fs.writeFileSync(serversPath, "[]");
 const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 const saveJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2));
 
+// ============================
+// 🔌 Mapas de conexión
+// ============================
 let androidClients = new Map();
 let socketToDevice = new Map();
 let panelesLocales = new Map();
@@ -47,6 +57,9 @@ function sanitizeIp(ip) {
   return ip.replace(/^::ffff:/, "").replace("::1", "localhost");
 }
 
+// ============================
+// ⚡ Socket.IO
+// ============================
 io.on("connection", (socket) => {
   const ip = socket.handshake.headers["x-forwarded-for"] || socket.conn.remoteAddress || "unknown";
   const cleanIp = sanitizeIp(ip);
@@ -99,13 +112,12 @@ io.on("connection", (socket) => {
     socket.emit("updateClientes", Array.from(androidClients.values()));
   });
 
-  // ❌ Desconexión con delay de 5s
+  // ❌ Desconexión con delay 5s
   socket.on("disconnect", () => {
     if (socketToDevice.has(socket.id)) {
       const deviceId = socketToDevice.get(socket.id);
       socketToDevice.delete(socket.id);
 
-      // Esperar 5 segundos antes de marcar offline
       setTimeout(() => {
         const stillDisconnected = !Array.from(socketToDevice.values()).includes(deviceId);
         if (stillDisconnected && androidClients.has(deviceId)) {
@@ -127,7 +139,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// 🔁 Refresco automático cada 3 segundos
+// 🔁 Refresco cada 3 segundos
 setInterval(() => {
   if (androidClients.size > 0) {
     io.emit("updateClientes", Array.from(androidClients.values()));
@@ -135,96 +147,114 @@ setInterval(() => {
   }
 }, 3000);
 
-app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
-app.get("/api/dispositivos", (_, res) => res.json(Array.from(androidClients.values())));
-app.get("/api/paneles", (_, res) => res.json(Array.from(panelesLocales.values())));
+// ============================
+// 📦 Subida de servidores ZIP
+// ============================
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + "-" + file.originalname.replace(/\s+/g, "_");
+    cb(null, unique);
+  },
+});
 
-app.post("/api/validate-key", (req, res) => {
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype !== "application/zip" && !file.originalname.endsWith(".zip")) {
+      return cb(new Error("Solo se permiten archivos .zip"));
+    }
+    cb(null, true);
+  },
+});
+
+// 📋 Listar servidores con contador de licencias
+app.get("/api/servers", (_, res) => {
+  const servers = readJson(serversPath);
+  const licencias = readJson(licPath);
+
+  const enriched = servers.map((s) => {
+    const count = licencias.filter(
+      (l) => l.assignedServer && l.assignedServer.id === s.id
+    ).length;
+    return { ...s, assignedCount: count };
+  });
+
+  res.json(enriched);
+});
+
+app.post("/api/servers", upload.single("serverZip"), (req, res) => {
   try {
-    const key = (req.body.key || "").trim();
-    const deviceId = (req.body.deviceId || "unknown").trim();
-    const nombre = req.body.nombre || "Sin nombre";
-    const modelo = req.body.modelo || "—";
+    const { name } = req.body;
+    if (!name || !req.file) return res.status(400).json({ error: "Faltan datos: nombre o ZIP." });
 
-    if (!key) return res.status(400).json({ valid: false, error: "Falta la clave" });
+    const servers = readJson(serversPath);
+    const nuevo = {
+      id: Date.now(),
+      name,
+      file: path.relative(__dirname, req.file.path),
+      sizeMB: (req.file.size / (1024 * 1024)).toFixed(2) + " MB",
+    };
 
-    const licencias = readJson(licPath);
-    let licencia = licencias.find((l) => (l.key || l) === key);
-    if (!licencia) return res.status(403).json({ valid: false, error: "Clave no válida" });
+    servers.push(nuevo);
+    saveJson(serversPath, servers);
 
-    if (typeof licencia === "string") licencia = { key: licencia };
-    if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId)
-      return res.status(409).json({ valid: false, error: "Licencia ya activada." });
-
-    licencia.usada = true;
-    licencia.deviceId = deviceId;
-    licencia.nombre = nombre;
-    licencia.modelo = modelo;
-    licencia.fechaUso = new Date().toISOString();
-
-    const idx = licencias.findIndex((l) => (l.key || l) === key);
-    licencias[idx] = licencia;
-    saveJson(licPath, licencias);
-
-    // Buscar si ya existe dispositivo con misma licencia
-    let existingDeviceId = null;
-    for (const [id, c] of androidClients) {
-      if (c.licencia === key) {
-        existingDeviceId = id;
-        break;
-      }
-    }
-
-    if (existingDeviceId) {
-      const existing = androidClients.get(existingDeviceId);
-      existing.estado = "autenticado";
-      existing.nombre = nombre;
-      existing.modelo = modelo;
-      existing.ultimaConexion = new Date().toISOString();
-      androidClients.set(existingDeviceId, existing);
-      console.log(`🔁 Licencia ${key} actualizada en ${existingDeviceId} (sin duplicar).`);
-    } else {
-      androidClients.set(deviceId, {
-        socketId: null,
-        deviceId,
-        nombre,
-        modelo,
-        versionApp: "—",
-        ip: "Licencia validada desde API",
-        licencia: key,
-        estado: "autenticado",
-        ultimaConexion: new Date().toISOString(),
-      });
-      console.log(`✅ Nuevo registro de licencia ${key} para ${deviceId}`);
-    }
-
-    broadcastClients();
-
-    let logs = [];
-    try { logs = JSON.parse(fs.readFileSync(licLogPath, "utf8")); } catch {}
-    logs.push({ key, deviceId, nombre, modelo, fechaUso: new Date().toISOString() });
-    fs.writeFileSync(licLogPath, JSON.stringify(logs, null, 2));
-
-    res.json({ valid: true, key, status: "ok", message: "Licencia válida", deviceId });
+    console.log(`📦 Servidor ZIP '${nuevo.name}' subido (${nuevo.sizeMB})`);
+    res.json({ success: true, servidor: nuevo });
   } catch (err) {
-    console.error("⚠️ Error validando licencia:", err);
-    res.status(500).json({ valid: false, error: "Error interno del servidor" });
+    console.error("❌ Error al subir servidor:", err);
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 });
 
-app.get("/api/servers", (_, res) => res.json(readJson(serversPath)));
-
-app.post("/api/servers", (req, res) => {
-  const { name, url } = req.body || {};
-  if (!name || !url) return res.status(400).json({ error: "Faltan campos: name y url" });
-
-  const servers = readJson(serversPath);
-  const nuevo = { id: Date.now(), name, url };
-  servers.push(nuevo);
-  saveJson(serversPath, servers);
-  res.json({ success: true, servidor: nuevo });
+// 📥 Descargar ZIP
+app.get("/api/download", (req, res) => {
+  const file = req.query.file;
+  if (!file) return res.status(400).json({ error: "Falta la ruta del archivo" });
+  const fullPath = path.join(__dirname, file);
+  if (!fs.existsSync(fullPath)) return res.status(404).json({ error: "Archivo no encontrado" });
+  res.download(fullPath);
 });
 
+// 🗑️ Eliminar servidor ZIP + limpiar licencias asociadas
+app.delete("/api/deleteServer/:id", (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    let servers = readJson(serversPath);
+    let licencias = readJson(licPath);
+
+    const index = servers.findIndex((s) => s.id === id);
+    if (index === -1) return res.status(404).json({ error: "Servidor no encontrado" });
+
+    const filePath = path.join(__dirname, servers[index].file);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    servers.splice(index, 1);
+    saveJson(serversPath, servers);
+
+    // limpiar referencias en licencias
+    let cambios = 0;
+    licencias = licencias.map((l) => {
+      const entry = typeof l === "string" ? { key: l } : l;
+      if (entry.assignedServer && entry.assignedServer.id === id) {
+        delete entry.assignedServer;
+        cambios++;
+      }
+      return entry;
+    });
+    if (cambios > 0) saveJson(licPath, licencias);
+
+    console.log(`🗑️ Servidor ID ${id} eliminado (${cambios} licencia(s) limpiada(s)).`);
+    res.json({ success: true, removed: id, cleanedLicenses: cambios });
+  } catch (err) {
+    console.error("❌ Error al eliminar servidor:", err);
+    res.status(500).json({ error: "Error interno al eliminar servidor" });
+  }
+});
+
+// ============================
+// 🎯 Asignación de servidor
+// ============================
 app.post("/api/assign", (req, res) => {
   const { license, serverId } = req.body || {};
   if (!license || !serverId) return res.status(400).json({ error: "Faltan datos" });
@@ -245,18 +275,21 @@ app.post("/api/assign", (req, res) => {
 
   for (const [, c] of androidClients) {
     if ((c.licencia || c.key) === license && c.socketId) {
-      io.to(c.socketId).emit("enviarServidor", { url: srv.url, nombre: srv.name });
-      console.log(`📤 Enviado servidor '${srv.name}' a ${c.nombre} (${license})`);
+      io.to(c.socketId).emit("enviarServidor", { zip: srv.file, nombre: srv.name });
+      console.log(`📤 ZIP '${srv.name}' enviado a ${c.nombre} (${license})`);
     }
   }
 
   res.json({ success: true, license, servidor: srv });
 });
 
+// ============================
+// 🚀 Inicio del servidor
+// ============================
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅ FIX duplicados + refresco 3s + delay desconexión 5s aplicado correctamente");
+  console.log("✅ ZIP Upload + contador licencias + limpieza + delay 5s + refresco 3s OK");
   console.log("======================================");
 });

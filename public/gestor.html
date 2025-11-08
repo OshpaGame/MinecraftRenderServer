@@ -4,8 +4,6 @@
   <meta charset="utf-8"/>
   <title>🧩 Gestor de servidores</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <link rel="stylesheet" href="style.css"/>
-
   <style>
     :root {
       --color-bg: #0e0e0e;
@@ -18,27 +16,23 @@
       --color-card: #1a1a1a;
       --color-border: #2b2b2b;
     }
-
     body {
       background: var(--color-bg);
       color: var(--color-text);
       font-family: "Segoe UI", Arial, sans-serif;
       margin: 20px;
     }
-
     h1 {
       color: var(--color-accent);
       text-align: center;
       margin-bottom: 10px;
     }
-
     .nav {
       display: flex;
       justify-content: center;
       gap: 10px;
       margin-bottom: 20px;
     }
-
     .nav button {
       background: var(--color-btn);
       color: #fff;
@@ -50,7 +44,6 @@
       font-weight: 500;
     }
     .nav button:hover { background: var(--color-btn-hover); transform: scale(1.05); }
-
     .panel {
       background: var(--color-card);
       border-radius: 12px;
@@ -58,13 +51,11 @@
       box-shadow: 0 0 10px rgba(0,255,170,0.08);
       margin-bottom: 25px;
     }
-
     .panel h2 {
       margin-top: 0;
       color: var(--color-accent);
       font-size: 18px;
     }
-
     .input-row {
       display: flex;
       justify-content: center;
@@ -72,7 +63,6 @@
       gap: 8px;
       margin-bottom: 15px;
     }
-
     input {
       background: #151515;
       color: #eee;
@@ -82,7 +72,7 @@
       font-size: 14px;
       width: 240px;
     }
-
+    input[type="file"] { width: auto; }
     button {
       background: var(--color-btn);
       color: #fff;
@@ -94,29 +84,26 @@
       transition: all 0.2s;
     }
     button:hover { background: var(--color-btn-hover); transform: scale(1.03); }
-
+    .danger { background: var(--color-danger); }
+    .danger:hover { background: var(--color-danger-hover); }
     table {
       width: 100%;
       border-collapse: collapse;
       font-size: 14px;
       margin-top: 10px;
     }
-
     th {
       background: #121212;
       color: var(--color-accent);
       padding: 10px;
     }
-
     td {
       padding: 8px;
       border-bottom: 1px solid var(--color-border);
       text-align: center;
       word-break: break-all;
     }
-
     tr:hover { background: rgba(0,255,170,0.05); }
-
     .footer {
       text-align: center;
       margin-top: 25px;
@@ -128,23 +115,20 @@
 <body>
   <h1>🧩 Gestor de servidores</h1>
 
-  <!-- 🔹 Navegación -->
   <div class="nav">
     <button onclick="window.location.href='index.html'">🏠 Panel principal</button>
     <button onclick="window.location.href='render.html'">📱 Ver dispositivos</button>
   </div>
 
-  <!-- 🔹 Panel de registro -->
   <div class="panel">
-    <h2>📦 Registrar nuevo servidor</h2>
-    <div class="input-row">
-      <input type="text" id="srvName" placeholder="Nombre del servidor">
-      <input type="text" id="srvUrl" placeholder="URL del servidor (zip o IP)">
-      <button id="btnAddServer">➕ Agregar</button>
-    </div>
+    <h2>📦 Subir nuevo servidor (archivo .zip)</h2>
+    <form id="uploadForm" enctype="multipart/form-data" class="input-row">
+      <input type="text" name="name" placeholder="Nombre del servidor" required />
+      <input type="file" name="serverZip" accept=".zip" required />
+      <button type="submit">⬆️ Subir servidor</button>
+    </form>
   </div>
 
-  <!-- 🔹 Tabla de servidores -->
   <div class="panel">
     <h2>📋 Lista de servidores</h2>
     <table>
@@ -152,89 +136,76 @@
         <tr>
           <th>ID</th>
           <th>Nombre</th>
-          <th>URL</th>
-          <th>Asignar a licencia</th>
+          <th>Archivo ZIP</th>
+          <th>Tamaño</th>
+          <th>Licencias activas</th>
+          <th>Acciones</th>
         </tr>
       </thead>
       <tbody id="srvTable">
-        <tr><td colspan="4" style="color:#777;">Cargando...</td></tr>
+        <tr><td colspan="6" style="color:#777;">Cargando...</td></tr>
       </tbody>
     </table>
   </div>
 
-  <div class="footer">
-    Minecraft Render Server Dashboard © 2025
-  </div>
+  <div class="footer">Minecraft Render Server Dashboard © 2025</div>
 
   <script>
-    const defaultLocal = "http://localhost:3000";
+    const defaultLocal = "http://localhost:10000";
     let api = location.origin;
-
-    // 🔧 Detección del entorno
     if (location.origin.startsWith("file://") || !location.origin.includes("http")) {
       api = localStorage.getItem("masterIP") || defaultLocal;
       if (!api.startsWith("http")) api = "http://" + api;
-      console.log("⚙️ Cargando IP guardada:", api);
     }
 
-    console.log("🌐 Conectando a API:", api);
-
     const srvTable = document.getElementById("srvTable");
-    const btnAdd = document.getElementById("btnAddServer");
 
     async function loadServers() {
-      srvTable.innerHTML = '<tr><td colspan="4" style="color:#777;">Cargando...</td></tr>';
+      srvTable.innerHTML = '<tr><td colspan="6" style="color:#777;">Cargando...</td></tr>';
       try {
         const res = await fetch(api + "/api/servers");
         const servers = await res.json();
         srvTable.innerHTML = "";
         if (!servers.length) {
-          srvTable.innerHTML = '<tr><td colspan="4" style="color:#777;">No hay servidores registrados aún</td></tr>';
+          srvTable.innerHTML = '<tr><td colspan="6" style="color:#777;">No hay servidores registrados aún</td></tr>';
           return;
         }
         servers.forEach(s => {
           const tr = document.createElement("tr");
+          const fileName = s.file ? s.file.split("/").pop() : "-";
           tr.innerHTML = `
             <td>${s.id}</td>
             <td>${s.name}</td>
-            <td><a href="${s.url}" target="_blank">${s.url}</a></td>
+            <td>${fileName}</td>
+            <td>${s.sizeMB || "—"}</td>
+            <td>${s.assignedCount || 0}</td>
             <td>
+              <button onclick="downloadServer('${s.file}')">⬇️ Descargar</button>
               <button onclick="assignServerPrompt(${s.id})">🎯 Asignar</button>
-            </td>`;
+              <button class="danger" onclick="deleteServer(${s.id})">🗑️ Eliminar</button>
+            </td>
+          `;
           srvTable.appendChild(tr);
         });
       } catch (e) {
         console.error("❌ Error al cargar servidores:", e);
-        srvTable.innerHTML = '<tr><td colspan="4" style="color:#f55;">Error al cargar lista.</td></tr>';
+        srvTable.innerHTML = '<tr><td colspan="6" style="color:#f55;">Error al cargar lista.</td></tr>';
       }
     }
 
-    btnAdd.addEventListener("click", async () => {
-      const name = document.getElementById("srvName").value.trim();
-      const url = document.getElementById("srvUrl").value.trim();
-      if (!name || !url) {
-        alert("⚠️ Debes ingresar nombre y URL del servidor.");
-        return;
-      }
-
+    document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
       try {
-        const res = await fetch(api + "/api/servers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, url })
-        });
+        const res = await fetch(api + "/api/servers", { method: "POST", body: formData });
         const data = await res.json();
         if (data.success) {
-          alert("✅ Servidor agregado correctamente.");
-          document.getElementById("srvName").value = "";
-          document.getElementById("srvUrl").value = "";
+          alert("✅ Servidor subido correctamente.");
+          e.target.reset();
           loadServers();
-        } else {
-          alert("⚠️ Error: " + (data.error || "No se pudo agregar."));
-        }
+        } else alert("⚠️ Error: " + (data.error || "No se pudo subir."));
       } catch (err) {
         alert("❌ Error al conectar con el servidor.");
-        console.error(err);
       }
     });
 
@@ -250,22 +221,34 @@
         const data = await res.json();
         if (data.success) {
           alert("✅ Servidor asignado correctamente.");
-        } else {
-          alert("⚠️ Error: " + (data.error || "No se pudo asignar."));
-        }
+          loadServers();
+        } else alert("⚠️ Error: " + (data.error || "No se pudo asignar."));
       } catch (err) {
         alert("❌ Error de conexión.");
       }
     }
 
+    function downloadServer(filePath) {
+      if (!filePath) return alert("Archivo no disponible.");
+      const url = api + "/api/download?file=" + encodeURIComponent(filePath);
+      window.open(url, "_blank");
+    }
+
+    async function deleteServer(id) {
+      if (!confirm("¿Seguro que deseas eliminar este servidor ZIP?")) return;
+      try {
+        const res = await fetch(api + "/api/deleteServer/" + id, { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) {
+          alert("🗑️ Servidor eliminado correctamente.");
+          loadServers();
+        } else alert("⚠️ Error: " + (data.error || "No se pudo eliminar."));
+      } catch (err) {
+        alert("❌ Error al conectar con el servidor.");
+      }
+    }
+
     loadServers();
-  </script>
-  <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(() => console.log('✅ Service Worker registrado'))
-      .catch(err => console.error('❌ SW error:', err));
-  }
   </script>
 </body>
 </html>
