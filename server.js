@@ -379,13 +379,16 @@ app.post("/api/assign", (req, res) => {
     licencias[idx] = entry;
     saveJson(licPath, licencias);
 
+    // Detectar dominio base de Render dinámicamente
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `https://${req.headers.host}`;
+
     // Buscar cliente online
     let found = false;
     for (const [, c] of androidClients) {
       if ((c.licencia || c.key) === license && c.socketId) {
         io.to(c.socketId).emit("enviarServidor", {
           zip: srv.file,
-          url: null,
+          url: `${baseUrl}/api/download?file=${encodeURIComponent(srv.file)}`,
           nombre: srv.name,
           sizeMB: srv.sizeMB,
           trigger: "auto",
@@ -413,7 +416,6 @@ app.post("/api/assign", (req, res) => {
   }
 });
 
-
 // ============================
 // 🚀 NUEVO: Enviar ZIP “a demanda” al dispositivo por licencia
 // ============================
@@ -426,15 +428,18 @@ app.post("/api/sendToDevice", (req, res) => {
     const srv = servers.find((s) => s.id === serverId);
     if (!srv) return res.status(404).json({ error: "Servidor no encontrado" });
 
+    // Detectar dominio base dinámico igual que arriba
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `https://${req.headers.host}`;
+
     let sent = false;
     for (const [, c] of androidClients) {
       if ((c.licencia || c.key) === license && c.socketId) {
         io.to(c.socketId).emit("enviarServidor", {
           zip: srv.file,
-          url: null,
+          url: `${baseUrl}/api/download?file=${encodeURIComponent(srv.file)}`,
           nombre: srv.name,
           sizeMB: srv.sizeMB,
-          trigger: "manual"
+          trigger: "manual",
         });
         console.log(`📤 (Manual) ZIP '${srv.name}' enviado a ${c.nombre} (${license})`);
         sent = true;
@@ -470,8 +475,8 @@ app.get("/api/assigned/:license", (req, res) => {
       zip: srv.file,
       url: null,
       sizeMB: srv.sizeMB,
-      download: `/api/download?file=${encodeURIComponent(srv.file)}`
-    }
+      download: `/api/download?file=${encodeURIComponent(srv.file)}`,
+    },
   });
 });
 
@@ -483,5 +488,6 @@ server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
   console.log("✅ ZIP Upload + contador licencias + limpieza + validate-key + delay 5s + refresco 3s OK");
+  console.log("🌐 Dominio base detectado:", process.env.RENDER_EXTERNAL_URL || "(usando host dinámico)");
   console.log("======================================");
 });
