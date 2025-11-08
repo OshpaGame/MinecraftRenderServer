@@ -101,13 +101,13 @@ if exist "%TEMP%\gestor_local_backup.html" (
 
 :: 🔄 Restaurar la versión local de server.js si el pull trajo la antigua
 if exist "%TEMP%\server_local_backup.js" (
-    find /I "validate-key" "server.js" >nul
+    find /I "Cache-Control" "server.js" >nul
     if errorlevel 1 (
-        echo ⚠️ Versión vieja de server.js detectada — restaurando versión moderna...
+        echo ⚠️ Versión vieja de server.js detectada — restaurando versión con no-cache...
         copy /Y "%TEMP%\server_local_backup.js" "server.js" >nul
-        echo ✅ Versión correcta de server.js restaurada.
+        echo ✅ Versión correcta de server.js (sin caché) restaurada.
     ) else (
-        echo 🧩 server.js ya contiene la versión moderna.
+        echo 🧩 server.js ya contiene el bloque de no-cache correctamente.
     )
     del "%TEMP%\server_local_backup.js" >nul
 )
