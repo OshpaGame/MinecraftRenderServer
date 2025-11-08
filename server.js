@@ -1,5 +1,4 @@
-// server.js — Render Cloud + Panel Maestro (FIX duplicados finales)
-// - Evita duplicados al validar licencias y al reconectar sockets.
+// server.js — Render Cloud + Panel Maestro (FIX duplicados + refresco cada 3s)
 
 const express = require("express");
 const http = require("http");
@@ -121,12 +120,13 @@ io.on("connection", (socket) => {
   });
 });
 
+// 🔁 Refresco automático cada 3 segundos
 setInterval(() => {
   if (androidClients.size > 0) {
     io.emit("updateClientes", Array.from(androidClients.values()));
-    console.log("🔄 Sincronización periódica automática enviada.");
+    console.log("🔄 Refresco automático (3s) enviado a todos los paneles.");
   }
-}, 60000);
+}, 3000);
 
 app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
 app.get("/api/dispositivos", (_, res) => res.json(Array.from(androidClients.values())));
@@ -250,6 +250,6 @@ const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅ FIX duplicados finales aplicado correctamente");
+  console.log("✅ FIX duplicados + refresco 3s aplicado correctamente");
   console.log("======================================");
 });
