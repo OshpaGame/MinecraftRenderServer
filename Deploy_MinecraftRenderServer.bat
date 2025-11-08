@@ -76,7 +76,7 @@ if exist "server.js" (
 )
 
 git fetch origin %BRANCH% >nul 2>&1
-git pull --rebase origin %BRANCH%
+git pull --rebase origin %BRANCH% >nul 2>&1
 if errorlevel 1 (
     echo ⚠️ Conflicto detectado. Abriendo VSCode...
     code .
@@ -86,10 +86,11 @@ if errorlevel 1 (
 echo ✅ Rebase limpio completado.
 echo.
 
-:: 🔄 Restaurar la versión local de gestor.html si el pull trajo la vieja
+:: 🔄 Restaurar gestor.html si detecta la versión vieja
 if exist "%TEMP%\gestor_local_backup.html" (
-    find /I "URL del servidor" "public\gestor.html" >nul
-    if not errorlevel 1 (
+    find /I "URL del servidor" "public\gestor.html" >nul 2>&1
+    set "FIND_ERR=%errorlevel%"
+    if "%FIND_ERR%"=="0" (
         echo ⚠️ Versión vieja de gestor.html detectada — restaurando versión ZIP...
         copy /Y "%TEMP%\gestor_local_backup.html" "public\gestor.html" >nul
         echo ✅ Versión correcta de gestor.html restaurada.
@@ -99,10 +100,11 @@ if exist "%TEMP%\gestor_local_backup.html" (
     del "%TEMP%\gestor_local_backup.html" >nul
 )
 
-:: 🔄 Restaurar la versión local de server.js si el pull trajo la antigua
+:: 🔄 Restaurar server.js si el bloque no-cache desapareció
 if exist "%TEMP%\server_local_backup.js" (
-    find /I "Cache-Control" "server.js" >nul
-    if errorlevel 1 (
+    find /I "Cache-Control" "server.js" >nul 2>&1
+    set "CACHE_ERR=%errorlevel%"
+    if "%CACHE_ERR%"=="1" (
         echo ⚠️ Versión vieja de server.js detectada — restaurando versión con no-cache...
         copy /Y "%TEMP%\server_local_backup.js" "server.js" >nul
         echo ✅ Versión correcta de server.js (sin caché) restaurada.
@@ -113,7 +115,7 @@ if exist "%TEMP%\server_local_backup.js" (
 )
 echo.
 
-git push origin %BRANCH%
+git push origin %BRANCH% >nul 2>&1
 if errorlevel 1 (
     echo ❌ Error al subir cambios. Verifica credenciales.
     pause
@@ -142,5 +144,6 @@ echo 🔗 Panel web: https://minecraft-render-server-4ps0.onrender.com
 echo 📦 Repo GitHub: https://github.com/OshpaGame/MinecraftRenderServer
 echo 💾 Backup: %BACKUP_FILE%
 echo.
+timeout /t 10 >nul
 pause
 exit /b
