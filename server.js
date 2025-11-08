@@ -349,40 +349,70 @@ app.post("/api/validate-key", (req, res) => {
 });
 
 // ============================
-// 🎯 Asignación de servidor a licencia
+// 🎯 Asignación de servidor a licencia (mejorada)
 // ============================
 app.post("/api/assign", (req, res) => {
-  const { license, serverId } = req.body || {};
-  if (!license || !serverId) return res.status(400).json({ error: "Faltan datos" });
-
-  const servers = readJson(serversPath);
-  const licencias = readJson(licPath);
-  const srv = servers.find((s) => s.id === serverId);
-  if (!srv) return res.status(404).json({ error: "Servidor no encontrado" });
-
-  const idx = licencias.findIndex((l) => (l.key || l.license || l) === license);
-  if (idx === -1) return res.status(404).json({ error: "Licencia no encontrada" });
-
-  const entry = typeof licencias[idx] === "string" ? { key: licencias[idx] } : licencias[idx];
-  entry.key = entry.key || license;
-  entry.assignedServer = srv;
-  licencias[idx] = entry;
-  saveJson(licPath, licencias);
-
-  for (const [, c] of androidClients) {
-    if ((c.licencia || c.key) === license && c.socketId) {
-      io.to(c.socketId).emit("enviarServidor", {
-        zip: srv.file,
-        url: null,
-        nombre: srv.name,
-        sizeMB: srv.sizeMB
-      });
-      console.log(`📤 ZIP '${srv.name}' enviado a ${c.nombre} (${license})`);
+  try {
+    const { license, serverId } = req.body || {};
+    if (!license || !serverId) {
+      console.warn("⚠️ /api/assign: faltan datos", req.body);
+      return res.status(400).json({ error: "Faltan datos: license o serverId" });
     }
-  }
 
-  res.json({ success: true, license, servidor: srv });
+    const servers = readJson(serversPath);
+    const licencias = readJson(licPath);
+    const srv = servers.find((s) => s.id === serverId || s.id === Number(serverId));
+    if (!srv) {
+      console.warn("⚠️ /api/assign: servidor no encontrado", serverId);
+      return res.status(404).json({ error: "Servidor no encontrado" });
+    }
+
+    const idx = licencias.findIndex((l) => (l.key || l.license || l) === license);
+    if (idx === -1) {
+      console.warn("⚠️ /api/assign: licencia no encontrada", license);
+      return res.status(404).json({ error: "Licencia no encontrada" });
+    }
+
+    const entry = typeof licencias[idx] === "string" ? { key: licencias[idx] } : licencias[idx];
+    entry.key = entry.key || license;
+    entry.assignedServer = srv;
+    licencias[idx] = entry;
+    saveJson(licPath, licencias);
+
+    // Buscar cliente online
+    let found = false;
+    for (const [, c] of androidClients) {
+      if ((c.licencia || c.key) === license && c.socketId) {
+        io.to(c.socketId).emit("enviarServidor", {
+          zip: srv.file,
+          url: null,
+          nombre: srv.name,
+          sizeMB: srv.sizeMB,
+          trigger: "auto",
+        });
+        console.log(`📤 (Asignar) ZIP '${srv.name}' enviado a ${c.nombre} (${license})`);
+        found = true;
+      }
+    }
+
+    if (!found) {
+      console.warn(`⚠️ /api/assign: no hay dispositivo online con licencia ${license}`);
+    }
+
+    console.log(`✅ /api/assign completado: licencia=${license}, servidor=${srv.name}`);
+    res.json({
+      success: true,
+      license,
+      servidor: srv,
+      sent: found,
+      message: found ? "Servidor enviado al dispositivo" : "Servidor asignado (dispositivo offline)",
+    });
+  } catch (err) {
+    console.error("❌ Error en /api/assign:", err);
+    res.status(500).json({ error: "Error interno al asignar servidor" });
+  }
 });
+
 
 // ============================
 // 🚀 NUEVO: Enviar ZIP “a demanda” al dispositivo por licencia
