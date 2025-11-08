@@ -4,7 +4,6 @@
   <meta charset="utf-8"/>
   <title>🧩 Gestor de servidores</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
   <style>
     :root {
       --color-bg: #0e0e0e;
@@ -17,25 +16,100 @@
       --color-card: #1a1a1a;
       --color-border: #2b2b2b;
     }
-    body { background: var(--color-bg); color: var(--color-text); font-family: "Segoe UI", Arial, sans-serif; margin: 20px; }
-    h1 { color: var(--color-accent); text-align: center; margin-bottom: 10px; }
-    .nav { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
-    .nav button { background: var(--color-btn); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      color: var(--color-accent);
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .nav {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .nav button {
+      background: var(--color-btn);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
     .nav button:hover { background: var(--color-btn-hover); transform: scale(1.05); }
-    .panel { background: var(--color-card); border-radius: 12px; padding: 20px; box-shadow: 0 0 10px rgba(0,255,170,0.08); margin-bottom: 25px; }
-    .panel h2 { margin-top: 0; color: var(--color-accent); font-size: 18px; }
-    .input-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
-    input { background: #151515; color: #eee; border: 1px solid var(--color-border); border-radius: 6px; padding: 8px 10px; font-size: 14px; width: 240px; }
+    .panel {
+      background: var(--color-card);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,255,170,0.08);
+      margin-bottom: 25px;
+    }
+    .panel h2 {
+      margin-top: 0;
+      color: var(--color-accent);
+      font-size: 18px;
+    }
+    .input-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+    input {
+      background: #151515;
+      color: #eee;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      width: 240px;
+    }
     input[type="file"] { width: auto; }
-    button { background: var(--color-btn); color: #fff; border: none; border-radius: 8px; padding: 8px 14px; margin: 4px; cursor: pointer; transition: all 0.2s; }
+    button {
+      background: var(--color-btn);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      margin: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
     button:hover { background: var(--color-btn-hover); transform: scale(1.03); }
     .danger { background: var(--color-danger); }
     .danger:hover { background: var(--color-danger-hover); }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
-    th { background: #121212; color: var(--color-accent); padding: 10px; }
-    td { padding: 8px; border-bottom: 1px solid var(--color-border); text-align: center; word-break: break-all; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    th {
+      background: #121212;
+      color: var(--color-accent);
+      padding: 10px;
+    }
+    td {
+      padding: 8px;
+      border-bottom: 1px solid var(--color-border);
+      text-align: center;
+      word-break: break-all;
+    }
     tr:hover { background: rgba(0,255,170,0.05); }
-    .footer { text-align: center; margin-top: 25px; font-size: 13px; color: #999; }
+    .footer {
+      text-align: center;
+      margin-top: 25px;
+      font-size: 13px;
+      color: #999;
+    }
   </style>
 </head>
 <body>
@@ -46,7 +120,7 @@
     <button onclick="window.location.href='render.html'">📱 Ver dispositivos</button>
   </div>
 
-  <!-- Subir servidor ZIP -->
+  <!-- 📦 Subir ZIP -->
   <div class="panel">
     <h2>📦 Subir nuevo servidor (archivo .zip)</h2>
     <form id="uploadForm" enctype="multipart/form-data" class="input-row">
@@ -56,7 +130,7 @@
     </form>
   </div>
 
-  <!-- Tabla de servidores -->
+  <!-- 📋 Lista -->
   <div class="panel">
     <h2>📋 Lista de servidores</h2>
     <table>
