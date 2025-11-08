@@ -1,10 +1,5 @@
-// server.js — Render Cloud + Panel Maestro (FIX duplicados de dispositivos)
-// - Socket.IO para Android y web
-// - Validación de licencias (/api/validate-key)
-// - Catálogo de servidores (/api/servers)
-// - Asignación de servidor por licencia (/api/assign)
-// - Sincronización automática de clientes conectados
-// - Servidor web completo en /public
+// server.js — Render Cloud + Panel Maestro (FIX duplicados finales)
+// - Evita duplicados al validar licencias y al reconectar sockets.
 
 const express = require("express");
 const http = require("http");
@@ -20,17 +15,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-// ============================
-// 🔌 Socket.IO
-// ============================
 const io = socketIo(server, {
   cors: { origin: "*" },
   allowEIO3: true,
 });
 
-// ============================
-// 📂 Archivos de datos
-// ============================
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
@@ -44,11 +33,8 @@ if (!fs.existsSync(serversPath)) fs.writeFileSync(serversPath, "[]");
 const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 const saveJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2));
 
-// ============================
-// 🗂 Estado en memoria
-// ============================
-let androidClients = new Map(); // deviceId -> info cliente
-let socketToDevice = new Map(); // socket.id -> deviceId
+let androidClients = new Map();
+let socketToDevice = new Map();
 let panelesLocales = new Map();
 
 function broadcastClients() {
@@ -62,30 +48,21 @@ function sanitizeIp(ip) {
   return ip.replace(/^::ffff:/, "").replace("::1", "localhost");
 }
 
-// ============================
-// ⚙️ Eventos Socket.IO
-// ============================
 io.on("connection", (socket) => {
-  const ip =
-    socket.handshake.headers["x-forwarded-for"] ||
-    socket.conn.remoteAddress ||
-    "unknown";
+  const ip = socket.handshake.headers["x-forwarded-for"] || socket.conn.remoteAddress || "unknown";
   const cleanIp = sanitizeIp(ip);
 
   console.log(`🌍 Nueva conexión: ${socket.id} (${cleanIp})`);
 
   if (androidClients.size > 0) {
     socket.emit("updateClientes", Array.from(androidClients.values()));
-    console.log(`📤 Sincronizando ${androidClients.size} cliente(s) activos al nuevo panel.`);
   }
 
-  // 📱 Registro de dispositivo Android sin duplicar
   socket.on("connectDevice", (data = {}) => {
     const deviceId = (data.deviceId || `unknown-${socket.id}`).trim();
     socketToDevice.set(socket.id, deviceId);
 
     if (androidClients.has(deviceId)) {
-      // ♻️ Reconexion de dispositivo existente
       const existing = androidClients.get(deviceId);
       existing.socketId = socket.id;
       existing.estado = "online";
@@ -112,13 +89,8 @@ io.on("connection", (socket) => {
     broadcastClients();
   });
 
-  // 🧠 Registro de panel local
   socket.on("registerPanel", (panelData = {}) => {
-    const data = {
-      ...panelData,
-      socketId: socket.id,
-      ultimaSync: new Date().toISOString(),
-    };
+    const data = { ...panelData, socketId: socket.id, ultimaSync: new Date().toISOString() };
     panelesLocales.set(socket.id, data);
     console.log(`🧩 Panel local registrado: ${panelData.panelId || socket.id}`);
   });
@@ -128,7 +100,6 @@ io.on("connection", (socket) => {
     socket.emit("updateClientes", Array.from(androidClients.values()));
   });
 
-  // ❌ Desconexión
   socket.on("disconnect", () => {
     if (socketToDevice.has(socket.id)) {
       const deviceId = socketToDevice.get(socket.id);
@@ -150,37 +121,21 @@ io.on("connection", (socket) => {
   });
 });
 
-// 🕒 Reemisión automática
 setInterval(() => {
   if (androidClients.size > 0) {
     io.emit("updateClientes", Array.from(androidClients.values()));
-    console.log("🔄 Sincronización periódica automática enviada a todos los paneles.");
+    console.log("🔄 Sincronización periódica automática enviada.");
   }
 }, 60000);
 
-// ============================
-// 🌍 Endpoints básicos
-// ============================
 app.get("/api/ping", (_, res) => res.json({ status: "ok", time: new Date() }));
 app.get("/api/dispositivos", (_, res) => res.json(Array.from(androidClients.values())));
 app.get("/api/paneles", (_, res) => res.json(Array.from(panelesLocales.values())));
 
-// ============================
-// 🔑 Licencias (validación + asignación)
-// ============================
-app.get("/api/licencias", (_, res) => {
-  try {
-    const list = readJson(licPath);
-    res.json({ total: list.length, sample: list.slice(0, 3) });
-  } catch (err) {
-    res.status(500).json({ error: "Error al leer licencias", message: err.message });
-  }
-});
-
 app.post("/api/validate-key", (req, res) => {
   try {
     const key = (req.body.key || "").trim();
-    const deviceId = req.body.deviceId || "unknown";
+    const deviceId = (req.body.deviceId || "unknown").trim();
     const nombre = req.body.nombre || "Sin nombre";
     const modelo = req.body.modelo || "—";
 
@@ -188,17 +143,11 @@ app.post("/api/validate-key", (req, res) => {
 
     const licencias = readJson(licPath);
     let licencia = licencias.find((l) => (l.key || l) === key);
-    if (!licencia) {
-      console.log(`❌ Intento con clave inválida: ${key}`);
-      return res.status(403).json({ valid: false, error: "Clave no válida" });
-    }
+    if (!licencia) return res.status(403).json({ valid: false, error: "Clave no válida" });
 
     if (typeof licencia === "string") licencia = { key: licencia };
-
-    if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId) {
-      console.log(`⚠️ Clave ${key} ya en uso por otro dispositivo.`);
-      return res.status(409).json({ valid: false, error: "Licencia ya activada en otro dispositivo." });
-    }
+    if (licencia.usada && licencia.deviceId && licencia.deviceId !== deviceId)
+      return res.status(409).json({ valid: false, error: "Licencia ya activada." });
 
     licencia.usada = true;
     licencia.deviceId = deviceId;
@@ -210,15 +159,23 @@ app.post("/api/validate-key", (req, res) => {
     licencias[idx] = licencia;
     saveJson(licPath, licencias);
 
-    console.log(`🔑 Licencia válida usada: ${key} por ${nombre}`);
+    // 🧩 Buscar si ya existe dispositivo con misma licencia
+    let existingDeviceId = null;
+    for (const [id, c] of androidClients) {
+      if (c.licencia === key) {
+        existingDeviceId = id;
+        break;
+      }
+    }
 
-    // Actualiza o crea sin duplicar
-    if (androidClients.has(deviceId)) {
-      const existing = androidClients.get(deviceId);
-      existing.licencia = key;
+    if (existingDeviceId) {
+      const existing = androidClients.get(existingDeviceId);
       existing.estado = "autenticado";
+      existing.nombre = nombre;
+      existing.modelo = modelo;
       existing.ultimaConexion = new Date().toISOString();
-      androidClients.set(deviceId, existing);
+      androidClients.set(existingDeviceId, existing);
+      console.log(`🔁 Licencia ${key} actualizada en ${existingDeviceId} (sin duplicar).`);
     } else {
       androidClients.set(deviceId, {
         socketId: null,
@@ -231,6 +188,7 @@ app.post("/api/validate-key", (req, res) => {
         estado: "autenticado",
         ultimaConexion: new Date().toISOString(),
       });
+      console.log(`✅ Nuevo registro de licencia ${key} para ${deviceId}`);
     }
 
     broadcastClients();
@@ -247,9 +205,6 @@ app.post("/api/validate-key", (req, res) => {
   }
 });
 
-// ============================
-// 📦 Catálogo de servidores
-// ============================
 app.get("/api/servers", (_, res) => res.json(readJson(serversPath)));
 
 app.post("/api/servers", (req, res) => {
@@ -260,14 +215,9 @@ app.post("/api/servers", (req, res) => {
   const nuevo = { id: Date.now(), name, url };
   servers.push(nuevo);
   saveJson(serversPath, servers);
-
-  console.log(`📦 Nuevo servidor registrado: ${name}`);
   res.json({ success: true, servidor: nuevo });
 });
 
-// ============================
-// 🔗 Asignación por licencia
-// ============================
 app.post("/api/assign", (req, res) => {
   const { license, serverId } = req.body || {};
   if (!license || !serverId) return res.status(400).json({ error: "Faltan datos" });
@@ -286,8 +236,6 @@ app.post("/api/assign", (req, res) => {
   licencias[idx] = entry;
   saveJson(licPath, licencias);
 
-  console.log(`🔗 Servidor '${srv.name}' asignado a licencia ${license}`);
-
   for (const [, c] of androidClients) {
     if ((c.licencia || c.key) === license && c.socketId) {
       io.to(c.socketId).emit("enviarServidor", { url: srv.url, nombre: srv.name });
@@ -298,22 +246,10 @@ app.post("/api/assign", (req, res) => {
   res.json({ success: true, license, servidor: srv });
 });
 
-app.get("/api/assigned/:license", (req, res) => {
-  const license = req.params.license;
-  const licencias = readJson(licPath);
-  const entry = licencias.find((l) => (l.key || l.license || l) === license);
-  if (!entry || !entry.assignedServer) return res.json({ assigned: null });
-  res.json({ assigned: entry.assignedServer });
-});
-
-// ============================
-// 🚀 Inicialización
-// ============================
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅ Licencias, catálogo y sincronización automática OK");
-  console.log("✅ FIX duplicados aplicado correctamente");
+  console.log("✅ FIX duplicados finales aplicado correctamente");
   console.log("======================================");
 });
