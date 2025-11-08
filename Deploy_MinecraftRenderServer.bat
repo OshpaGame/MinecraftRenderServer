@@ -63,6 +63,18 @@ if errorlevel 1 (
 )
 echo.
 
+:: ===========================================
+:: 🔒 Protección automática de archivos críticos
+:: ===========================================
+if exist "public\gestor.html" (
+    echo 🔐 Guardando copia local de gestor.html...
+    copy /Y "public\gestor.html" "%TEMP%\gestor_local_backup.html" >nul
+)
+if exist "server.js" (
+    echo 🔐 Guardando copia local de server.js...
+    copy /Y "server.js" "%TEMP%\server_local_backup.js" >nul
+)
+
 git fetch origin %BRANCH% >nul 2>&1
 git pull --rebase origin %BRANCH%
 if errorlevel 1 (
@@ -72,6 +84,33 @@ if errorlevel 1 (
     exit /b
 )
 echo ✅ Rebase limpio completado.
+echo.
+
+:: 🔄 Restaurar la versión local de gestor.html si el pull trajo la vieja
+if exist "%TEMP%\gestor_local_backup.html" (
+    find /I "URL del servidor" "public\gestor.html" >nul
+    if not errorlevel 1 (
+        echo ⚠️ Versión vieja de gestor.html detectada — restaurando versión ZIP...
+        copy /Y "%TEMP%\gestor_local_backup.html" "public\gestor.html" >nul
+        echo ✅ Versión correcta de gestor.html restaurada.
+    ) else (
+        echo 🧩 gestor.html ya está actualizado.
+    )
+    del "%TEMP%\gestor_local_backup.html" >nul
+)
+
+:: 🔄 Restaurar la versión local de server.js si el pull trajo la antigua
+if exist "%TEMP%\server_local_backup.js" (
+    find /I "validate-key" "server.js" >nul
+    if errorlevel 1 (
+        echo ⚠️ Versión vieja de server.js detectada — restaurando versión moderna...
+        copy /Y "%TEMP%\server_local_backup.js" "server.js" >nul
+        echo ✅ Versión correcta de server.js restaurada.
+    ) else (
+        echo 🧩 server.js ya contiene la versión moderna.
+    )
+    del "%TEMP%\server_local_backup.js" >nul
+)
 echo.
 
 git push origin %BRANCH%
