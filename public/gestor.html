@@ -259,5 +259,34 @@
 
     loadServers();
   </script>
+
+  <!-- 🚫 Bloque anti-caché mejorado -->
+  <script>
+  (function() {
+    const currentVersion = '2025-11-07v2'; // cambia esto con cada actualización
+    const key = 'gestor_html_version';
+    const last = localStorage.getItem(key);
+
+    if (last !== currentVersion) {
+      localStorage.setItem(key, currentVersion);
+      console.log('🧩 Nueva versión detectada — recargando sin caché...');
+      fetch(window.location.href + '?v=' + currentVersion, { cache: 'reload' })
+        .then(() => window.location.reload(true))
+        .catch(() => window.location.reload(true));
+      return;
+    }
+
+    // Asegura que los recursos JS/CSS siempre lleven ?v= para romper caché
+    const versionParam = '?v=' + currentVersion;
+    document.querySelectorAll('script[src],link[href]').forEach(el => {
+      const attr = el.src || el.href;
+      if (attr && !attr.includes('?v=')) {
+        const newUrl = attr + versionParam;
+        if (el.src) el.src = newUrl;
+        if (el.href) el.href = newUrl;
+      }
+    });
+  })();
+  </script>
 </body>
 </html>
