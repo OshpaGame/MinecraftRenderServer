@@ -163,18 +163,46 @@
     }
 
     function renderDevices(list) {
-      // Dropdown
-      const onlineWithKey = list
-        .filter(c => (c.estado !== "offline") && (c.licencia && c.licencia !== "-"))
-        .sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
-      deviceSelect.innerHTML = '<option value="">— Selecciona un dispositivo (licencia) —</option>';
-      for (const c of onlineWithKey) {
-        const label = `${c.nombre || "Desconocido"} — ${c.licencia} (${c.modelo || "—"})`;
-        const opt = document.createElement("option");
-        opt.value = c.licencia;
-        opt.textContent = label;
-        deviceSelect.appendChild(opt);
-      }
+  // 🔸 Guardar el valor seleccionado antes de regenerar
+  const prevSelected = deviceSelect.value;
+
+  // Dropdown
+  const onlineWithKey = list
+    .filter(c => (c.estado !== "offline") && (c.licencia && c.licencia !== "-"))
+    .sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
+  
+  deviceSelect.innerHTML = '<option value="">— Selecciona un dispositivo (licencia) —</option>';
+  for (const c of onlineWithKey) {
+    const label = `${c.nombre || "Desconocido"} — ${c.licencia} (${c.modelo || "—"})`;
+    const opt = document.createElement("option");
+    opt.value = c.licencia;
+    opt.textContent = label;
+    deviceSelect.appendChild(opt);
+  }
+
+  // 🔸 Restaurar selección si sigue existiendo en la nueva lista
+  if (prevSelected && onlineWithKey.some(c => c.licencia === prevSelected)) {
+    deviceSelect.value = prevSelected;
+  }
+
+  // Tabla
+  devTable.innerHTML = "";
+  if (!list.length) {
+    devTable.innerHTML = '<tr><td colspan="5" class="muted">Sin dispositivos todavía.</td></tr>';
+    return;
+  }
+  for (const c of list) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${c.nombre || "—"}</td>
+      <td>${c.licencia || "-"}</td>
+      <td>${c.modelo || "—"}</td>
+      <td>${c.estado || "—"}</td>
+      <td>${c.ultimaConexion ? new Date(c.ultimaConexion).toLocaleString() : "—"}</td>
+    `;
+    devTable.appendChild(tr);
+  }
+}
 
       // Tabla
       devTable.innerHTML = "";
