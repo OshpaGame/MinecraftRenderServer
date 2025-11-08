@@ -19,6 +19,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
+// 🚫 Evitar caché de archivos HTML en Render/CDN
+app.use((req, res, next) => {
+  if (req.url.endsWith(".html")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+
 const io = socketIo(server, {
   cors: { origin: "*" },
   allowEIO3: true,
@@ -282,7 +292,6 @@ app.post("/api/validate-key", (req, res) => {
       return res.status(409).json({ valid: false, error: "Licencia ya activada en otro dispositivo." });
     }
 
-    // marcar uso
     licencia.usada = true;
     licencia.deviceId = deviceId;
     licencia.nombre = nombre;
@@ -293,7 +302,6 @@ app.post("/api/validate-key", (req, res) => {
     licencias[idx] = licencia;
     saveJson(licPath, licencias);
 
-    // actualizar mapa de clientes SIN duplicar
     if (androidClients.has(deviceId)) {
       const existing = androidClients.get(deviceId);
       existing.licencia = key;
@@ -315,7 +323,6 @@ app.post("/api/validate-key", (req, res) => {
     }
     broadcastClients();
 
-    // log
     let logs = [];
     try { logs = JSON.parse(fs.readFileSync(licLogPath, "utf8")); } catch {}
     logs.push({ key, deviceId, nombre, modelo, fechaUso: new Date().toISOString() });
@@ -349,12 +356,11 @@ app.post("/api/assign", (req, res) => {
   licencias[idx] = entry;
   saveJson(licPath, licencias);
 
-  // notificar en tiempo real (compat: mandamos zip y url)
   for (const [, c] of androidClients) {
     if ((c.licencia || c.key) === license && c.socketId) {
       io.to(c.socketId).emit("enviarServidor", {
         zip: srv.file,
-        url: null,          // compat: antes se usaba url, ahora ZIP
+        url: null,
         nombre: srv.name,
         sizeMB: srv.sizeMB
       });
@@ -365,14 +371,13 @@ app.post("/api/assign", (req, res) => {
   res.json({ success: true, license, servidor: srv });
 });
 
-// Consultar servidor asignado a una licencia (compat: incluye zip y url)
+// Consultar servidor asignado a una licencia
 app.get("/api/assigned/:license", (req, res) => {
   const license = req.params.license;
   const licencias = readJson(licPath);
   const entry = licencias.find((l) => (l.key || l.license || l) === license);
   if (!entry || !entry.assignedServer) return res.json({ assigned: null });
 
-  // respuesta con compatibilidad
   const srv = entry.assignedServer;
   res.json({
     assigned: {
