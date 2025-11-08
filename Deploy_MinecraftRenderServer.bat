@@ -1,25 +1,26 @@
 @echo off
 setlocal EnableDelayedExpansion
-title ☁️ Minecraft Render Server - Auto Sync + Deploy
+title ☁️ Minecraft Render Server - Auto Sync + Deploy (SAFE MODE)
 color 0A
 chcp 65001 >nul
 
-echo ============================================
-echo     ☁️ Minecraft Render Server - Deploy Tool
-echo ============================================
-echo.
+:: Si ocurre un error, pausamos en lugar de cerrar
+set "ERROR_LOG=%~dp0deploy_error.log"
+echo ============================================ > "%ERROR_LOG%"
+echo [%date% %time%] Inicio de despliegue >> "%ERROR_LOG%"
+echo ============================================ >> "%ERROR_LOG%"
 
 cd /d "%~dp0"
 
 echo 🌐 Verificando conexión...
 ping -n 1 github.com >nul 2>&1
 if errorlevel 1 (
+    echo ❌ No hay conexión. >> "%ERROR_LOG%"
     echo ❌ No hay conexión. Verifica tu red.
     pause
-    exit /b
+    goto :END
 )
 echo ✅ Conexión establecida.
-echo.
 
 set "BACKUP_DIR=%~dp0backups"
 if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
@@ -28,7 +29,12 @@ set "BACKUP_FILE=%BACKUP_DIR%\mc_render_backup_!DATESTR!.zip"
 echo 💾 Creando respaldo...
 powershell -NoProfile -Command ^
  "Compress-Archive -Path * -DestinationPath '%BACKUP_FILE%' -Force -CompressionLevel Optimal" >nul 2>&1
-if exist "%BACKUP_FILE%" (echo ✅ Respaldo creado.) else (echo ⚠️ No se pudo crear respaldo.)
+if exist "%BACKUP_FILE%" (
+    echo ✅ Respaldo creado.
+) else (
+    echo ⚠️ No se pudo crear respaldo. >> "%ERROR_LOG%"
+    echo ⚠️ No se pudo crear respaldo.
+)
 echo.
 
 if exist ".git\index.lock" del /f /q ".git\index.lock"
@@ -37,12 +43,10 @@ if exist ".git\rebase-merge" (
     rmdir /s /q ".git\rebase-merge" >nul 2>&1
 )
 echo 🧹 Limpieza Git completada.
-echo.
 
-for /f "tokens=*" %%b in ('git branch --show-current') do set "BRANCH=%%b"
+for /f "tokens=*" %%b in ('git branch --show-current 2^>nul') do set "BRANCH=%%b"
 if "%BRANCH%"=="" set "BRANCH=main"
 echo 🧭 Rama actual: %BRANCH%
-echo.
 
 (
 echo node_modules/
@@ -81,10 +85,9 @@ if errorlevel 1 (
     echo ⚠️ Conflicto detectado. Abriendo VSCode...
     code .
     pause
-    exit /b
+    goto :END
 )
 echo ✅ Rebase limpio completado.
-echo.
 
 :: 🔄 Restaurar gestor.html si detecta la versión vieja
 if exist "%TEMP%\gestor_local_backup.html" (
@@ -93,23 +96,21 @@ if exist "%TEMP%\gestor_local_backup.html" (
     if "%FIND_ERR%"=="0" (
         echo ⚠️ Versión vieja de gestor.html detectada — restaurando versión ZIP...
         copy /Y "%TEMP%\gestor_local_backup.html" "public\gestor.html" >nul
-        echo ✅ Versión correcta de gestor.html restaurada.
     ) else (
-        echo 🧩 gestor.html ya está actualizado.
+        echo 🧩 gestor.html actualizado.
     )
     del "%TEMP%\gestor_local_backup.html" >nul
 )
 
-:: 🔄 Restaurar server.js si el bloque no-cache desapareció
+:: 🔄 Restaurar server.js si no tiene Cache-Control
 if exist "%TEMP%\server_local_backup.js" (
     find /I "Cache-Control" "server.js" >nul 2>&1
     set "CACHE_ERR=%errorlevel%"
     if "%CACHE_ERR%"=="1" (
-        echo ⚠️ Versión vieja de server.js detectada — restaurando versión con no-cache...
+        echo ⚠️ Versión vieja de server.js detectada — restaurando no-cache...
         copy /Y "%TEMP%\server_local_backup.js" "server.js" >nul
-        echo ✅ Versión correcta de server.js (sin caché) restaurada.
     ) else (
-        echo 🧩 server.js ya contiene el bloque de no-cache correctamente.
+        echo 🧩 server.js actualizado.
     )
     del "%TEMP%\server_local_backup.js" >nul
 )
@@ -117,22 +118,21 @@ echo.
 
 git push origin %BRANCH% >nul 2>&1
 if errorlevel 1 (
+    echo ❌ Error al subir cambios. Verifica credenciales. >> "%ERROR_LOG%"
     echo ❌ Error al subir cambios. Verifica credenciales.
     pause
-    exit /b
+    goto :END
 )
 echo ✅ Cambios subidos correctamente a GitHub.
-echo.
 
 echo 🧹 Limpiando respaldos antiguos...
-for /f "skip=5 delims=" %%F in ('dir "%BACKUP_DIR%\mc_render_backup_*.zip" /b /o-d') do del /q "%BACKUP_DIR%\%%F" >nul 2>&1
+for /f "skip=5 delims=" %%F in ('dir "%BACKUP_DIR%\mc_render_backup_*.zip" /b /o-d 2^>nul') do del /q "%BACKUP_DIR%\%%F" >nul 2>&1
 echo ✅ Limpieza completada.
-echo.
 
 if exist "render.yaml" (
-    echo 🧰 Archivo render.yaml detectado — Render redeployará automáticamente.
+    echo 🧰 render.yaml detectado — Render redeployará automáticamente.
 ) else (
-    echo ⚠️ No se encontró render.yaml — verifícalo en Render.
+    echo ⚠️ No se encontró render.yaml.
 )
 echo.
 
@@ -144,6 +144,12 @@ echo 🔗 Panel web: https://minecraft-render-server-4ps0.onrender.com
 echo 📦 Repo GitHub: https://github.com/OshpaGame/MinecraftRenderServer
 echo 💾 Backup: %BACKUP_FILE%
 echo.
-timeout /t 10 >nul
+echo (Si la ventana se cerró sola, revisa %ERROR_LOG%)
+pause
+goto :END
+
+:END
+echo.
+echo 💡 Script finalizado.
 pause
 exit /b
