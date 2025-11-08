@@ -24,9 +24,8 @@
     .panel { background: var(--color-card); border-radius: 12px; padding: 20px; box-shadow: 0 0 10px rgba(0,255,170,0.08); margin-bottom: 25px; }
     .panel h2 { margin-top: 0; color: var(--color-accent); font-size: 18px; display:flex; align-items:center; gap:10px;}
     .input-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
-    input { background: #151515; color: #eee; border: 1px solid var(--color-border); border-radius: 6px; padding: 8px 10px; font-size: 14px; width: 240px; }
+    input, select { background: #151515; color:#eee; border:1px solid var(--color-border); border-radius:6px; padding:8px 10px; font-size:14px; min-width:240px; }
     input[type="file"] { width: auto; }
-    select { background: #151515; color:#eee; border:1px solid var(--color-border); border-radius:6px; padding:8px 10px; font-size:14px; min-width:260px;}
     button { background: var(--color-btn); color: #fff; border: none; border-radius: 8px; padding: 8px 14px; margin: 4px; cursor: pointer; transition: all 0.2s; }
     button:hover { background: var(--color-btn-hover); transform: scale(1.03); }
     .danger { background: var(--color-danger); }
@@ -36,7 +35,6 @@
     td { padding: 8px; border-bottom: 1px solid var(--color-border); text-align: center; word-break: break-all; }
     tr:hover { background: rgba(0,255,170,0.05); }
     .footer { text-align: center; margin-top: 25px; font-size: 13px; color: #999; }
-    /* Barra de progreso */
     .progress-wrap { width:100%; max-width:560px; margin:10px auto 0; }
     .progress { width: 100%; height: 10px; background:#101010; border:1px solid var(--color-border); border-radius: 999px; overflow: hidden; }
     .progress .bar { height:100%; width:0%; background: linear-gradient(90deg, #00ffaa, #00c28a); transition: width .1s ease; }
@@ -89,7 +87,6 @@
       <input type="file" name="serverZip" accept=".zip" required />
       <button type="submit">⬆️ Subir servidor</button>
     </form>
-    <!-- Barra de carga dentro del panel -->
     <div id="progressWrap" class="progress-wrap hidden">
       <div class="progress"><div id="uploadBar" class="bar"></div></div>
       <div id="uploadInfo" class="progress-info">Listo.</div>
@@ -139,14 +136,11 @@
     const uploadBar = document.getElementById("uploadBar");
     const uploadInfo = document.getElementById("uploadInfo");
 
-    // ===== Socket.IO: dispositivos en vivo =====
     const socket = io(api, { transports: ["websocket", "polling"] });
     socket.on("connect", () => console.log("🔌 Socket conectado"));
     socket.on("disconnect", () => console.log("🔌 Socket desconectado"));
 
-    let lastClients = [];
     socket.on("updateClientes", (list = []) => {
-      lastClients = list;
       renderDevices(list);
       toggleSendFeatures(list);
     });
@@ -154,76 +148,58 @@
     function toggleSendFeatures(list) {
       const onlineLic = list.filter(c => (c.estado !== "offline") && (c.licencia && c.licencia !== "-"));
       devCount.textContent = onlineLic.length;
-      // hint visible si hay al menos 1 dispositivo con licencia
-      if (onlineLic.length > 0) {
-        sendHintRow.classList.remove("hidden");
-      } else {
-        sendHintRow.classList.add("hidden");
-      }
+      if (onlineLic.length > 0) sendHintRow.classList.remove("hidden");
+      else sendHintRow.classList.add("hidden");
     }
 
-    function renderDevices(list) {
-  // 🔸 Guardar el valor seleccionado antes de regenerar
-  const prevSelected = deviceSelect.value;
+    function renderDevices(list = []) {
+      const prevSelected = deviceSelect.value;
 
-  // Dropdown
-  const onlineWithKey = list
-    .filter(c => (c.estado !== "offline") && (c.licencia && c.licencia !== "-"))
-    .sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
-  
-  deviceSelect.innerHTML = '<option value="">— Selecciona un dispositivo (licencia) —</option>';
-  for (const c of onlineWithKey) {
-    const label = `${c.nombre || "Desconocido"} — ${c.licencia} (${c.modelo || "—"})`;
-    const opt = document.createElement("option");
-    opt.value = c.licencia;
-    opt.textContent = label;
-    deviceSelect.appendChild(opt);
-  }
+      const onlineWithKey = list.filter(c =>
+        c.licencia && c.licencia !== "-" && c.licencia !== "sin clave"
+      ).sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
 
-  // 🔸 Restaurar selección si sigue existiendo en la nueva lista
-  if (prevSelected && onlineWithKey.some(c => c.licencia === prevSelected)) {
-    deviceSelect.value = prevSelected;
-  }
+      deviceSelect.innerHTML = '<option value="">— Selecciona un dispositivo (licencia) —</option>';
+      for (const c of onlineWithKey) {
+        const label = `${c.nombre || "Desconocido"} — ${c.licencia} (${c.modelo || "—"})`;
+        const opt = document.createElement("option");
+        opt.value = c.licencia;
+        opt.textContent = label;
+        deviceSelect.appendChild(opt);
+      }
+      if (prevSelected && onlineWithKey.some(c => c.licencia === prevSelected)) {
+        deviceSelect.value = prevSelected;
+      }
 
-  // Tabla
-  devTable.innerHTML = "";
-  if (!list.length) {
-    devTable.innerHTML = '<tr><td colspan="5" class="muted">Sin dispositivos todavía.</td></tr>';
-    return;
-  }
-  for (const c of list) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${c.nombre || "—"}</td>
-      <td>${c.licencia || "-"}</td>
-      <td>${c.modelo || "—"}</td>
-      <td>${c.estado || "—"}</td>
-      <td>${c.ultimaConexion ? new Date(c.ultimaConexion).toLocaleString() : "—"}</td>
-    `;
-    devTable.appendChild(tr);
-  }
-}
-
-      // Tabla
       devTable.innerHTML = "";
       if (!list.length) {
         devTable.innerHTML = '<tr><td colspan="5" class="muted">Sin dispositivos todavía.</td></tr>';
+        devCount.textContent = "0";
         return;
       }
+
       for (const c of list) {
+        const color =
+          c.estado === "online" ? "style='color:#00ffaa;'" :
+          c.estado === "autenticado" ? "style='color:#5be1ff;'" :
+          "style='color:#777;'";
+        const emoji =
+          c.estado === "online" ? "🟢" :
+          c.estado === "autenticado" ? "🔵" :
+          "⚫";
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${c.nombre || "—"}</td>
           <td>${c.licencia || "-"}</td>
           <td>${c.modelo || "—"}</td>
-          <td>${c.estado || "—"}</td>
+          <td ${color}>${emoji} ${c.estado || "—"}</td>
           <td>${c.ultimaConexion ? new Date(c.ultimaConexion).toLocaleString() : "—"}</td>
         `;
         devTable.appendChild(tr);
       }
+      devCount.textContent = list.length;
     }
 
-    // ===== Servidores =====
     async function loadServers() {
       srvTable.innerHTML = '<tr><td colspan="6" style="color:#777;">Cargando...</td></tr>';
       try {
@@ -258,12 +234,10 @@
       }
     }
 
-    // ===== Subida con barra de progreso =====
     document.getElementById("uploadForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const form = e.target;
       const formData = new FormData(form);
-
       progressWrap.classList.remove("hidden");
       setProgress(0, "Preparando subida...");
 
@@ -289,12 +263,11 @@
         } catch {
           setProgress(0, "⚠️ Error inesperado de respuesta.");
         }
-        // Oculta la barra después de 1.5s
-        setTimeout(()=>{ progressWrap.classList.add("hidden"); setProgress(0,"Listo."); }, 1500);
+        setTimeout(()=>{ progressWrap.classList.add("hidden"); setProgress(0,"Listo."); },1500);
       };
       xhr.onerror = () => {
         setProgress(0, "❌ Error al conectar con el servidor.");
-        setTimeout(()=>{ progressWrap.classList.add("hidden"); setProgress(0,"Listo."); }, 1500);
+        setTimeout(()=>{ progressWrap.classList.add("hidden"); setProgress(0,"Listo."); },1500);
       };
       xhr.send(formData);
     });
@@ -304,80 +277,12 @@
       uploadInfo.textContent = text || "";
     }
 
-    // ===== Acciones =====
-    async function assignServerPrompt(serverId) {
-      const license = prompt("Introduce la licencia a la que asignar este servidor:");
-      if (!license) return;
-      try {
-        const res = await fetch(api + "/api/assign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ license, serverId })
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert("✅ Servidor asignado correctamente.");
-          loadServers();
-        } else {
-          alert("⚠️ Error: " + (data.error || "No se pudo asignar."));
-        }
-      } catch (err) {
-        alert("❌ Error de conexión.");
-      }
-    }
-
-    function sendToSelected(serverId) {
-      const license = deviceSelect.value;
-      if (!license) {
-        alert("Selecciona un dispositivo destino (licencia) en el combo.");
-        return;
-      }
-      fetch(api + "/api/sendToDevice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ license, serverId })
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          alert("📤 Enviado al dispositivo con licencia: " + license);
-        } else {
-          alert("⚠️ " + (data.error || "No se pudo enviar."));
-        }
-      })
-      .catch(() => alert("❌ Error de conexión."));
-    }
-
-    function downloadServer(filePath) {
-      if (!filePath) return alert("Archivo no disponible.");
-      const url = api + "/api/download?file=" + encodeURIComponent(filePath);
-      window.open(url, "_blank");
-    }
-
-    async function deleteServer(id) {
-      if (!confirm("¿Seguro que deseas eliminar este servidor ZIP?")) return;
-      try {
-        const res = await fetch(api + "/api/deleteServer/" + id, { method: "DELETE" });
-        const data = await res.json();
-        if (data.success) {
-          alert("🗑️ Servidor eliminado correctamente.");
-          loadServers();
-        } else {
-          alert("⚠️ Error: " + (data.error || "No se pudo eliminar."));
-        }
-      } catch (err) {
-        alert("❌ Error al conectar con el servidor.");
-      }
-    }
-
-    // Inicializa
     loadServers();
   </script>
 
-  <!-- 🚫 Bloque anti-caché mejorado -->
   <script>
   (function() {
-    const currentVersion = '2025-11-07v3'; // cambia esto con cada actualización
+    const currentVersion = '2025-11-07v4';
     const key = 'gestor_html_version';
     const last = localStorage.getItem(key);
 
@@ -389,17 +294,6 @@
         .catch(() => window.location.reload(true));
       return;
     }
-
-    // Asegura que los recursos JS/CSS siempre lleven ?v= para romper caché
-    const versionParam = '?v=' + currentVersion;
-    document.querySelectorAll('script[src],link[href]').forEach(el => {
-      const attr = el.src || el.href;
-      if (attr && !attr.includes('?v=')) {
-        const newUrl = attr + versionParam;
-        if (el.src) el.src = newUrl;
-        if (el.href) el.href = newUrl;
-      }
-    });
   })();
   </script>
 </body>
