@@ -19,20 +19,28 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-// 🚫 Evitar caché de HTML, JS, CSS en Render/CDN
-app.use((req, res, next) => {
-  if (
-    req.url.endsWith(".html") ||
-    req.url.endsWith(".js") ||
-    req.url.endsWith(".css")
-  ) {
+// 🚫 Anti-Cache extremo para Render y navegadores
+const optionsNoCache = {
+  setHeaders: (res, path) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     res.setHeader("Surrogate-Control", "no-store");
-  }
-  next();
+  },
+};
+
+// Sirve los archivos públicos SIN caché
+app.use(express.static(path.join(__dirname, "public"), optionsNoCache));
+
+// Forzar gestor.html a ser servido SIEMPRE desde disco
+app.get("/gestor.html", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.sendFile(path.join(__dirname, "public", "gestor.html"));
 });
+
 
 
 const io = socketIo(server, {
