@@ -1,4 +1,4 @@
-// server.js — Render Cloud + Panel Maestro (FIX duplicados + refresco cada 3s)
+// server.js — Render Cloud + Panel Maestro (FIX duplicados + refresco cada 3s + delay 5s desconexión)
 
 const express = require("express");
 const http = require("http");
@@ -99,20 +99,27 @@ io.on("connection", (socket) => {
     socket.emit("updateClientes", Array.from(androidClients.values()));
   });
 
+  // ❌ Desconexión con delay de 5s
   socket.on("disconnect", () => {
     if (socketToDevice.has(socket.id)) {
       const deviceId = socketToDevice.get(socket.id);
       socketToDevice.delete(socket.id);
-      if (androidClients.has(deviceId)) {
-        const c = androidClients.get(deviceId);
-        c.estado = "offline";
-        c.socketId = null;
-        c.ultimaConexion = new Date().toISOString();
-        androidClients.set(deviceId, c);
-        console.log(`❌ Cliente Android desconectado: ${c.nombre} (${c.deviceId})`);
-        broadcastClients();
-      }
+
+      // Esperar 5 segundos antes de marcar offline
+      setTimeout(() => {
+        const stillDisconnected = !Array.from(socketToDevice.values()).includes(deviceId);
+        if (stillDisconnected && androidClients.has(deviceId)) {
+          const c = androidClients.get(deviceId);
+          c.estado = "offline";
+          c.socketId = null;
+          c.ultimaConexion = new Date().toISOString();
+          androidClients.set(deviceId, c);
+          console.log(`⏱️ Cliente ${c.nombre} (${deviceId}) marcado como OFFLINE tras 5s.`);
+          broadcastClients();
+        }
+      }, 5000);
     }
+
     if (panelesLocales.has(socket.id)) {
       panelesLocales.delete(socket.id);
       console.log(`⚠️ Panel local desconectado: ${socket.id}`);
@@ -159,7 +166,7 @@ app.post("/api/validate-key", (req, res) => {
     licencias[idx] = licencia;
     saveJson(licPath, licencias);
 
-    // 🧩 Buscar si ya existe dispositivo con misma licencia
+    // Buscar si ya existe dispositivo con misma licencia
     let existingDeviceId = null;
     for (const [id, c] of androidClients) {
       if (c.licencia === key) {
@@ -250,6 +257,6 @@ const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
-  console.log("✅ FIX duplicados + refresco 3s aplicado correctamente");
+  console.log("✅ FIX duplicados + refresco 3s + delay desconexión 5s aplicado correctamente");
   console.log("======================================");
 });
