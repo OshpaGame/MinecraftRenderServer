@@ -1,4 +1,4 @@
-// server.js — Render Cloud + Panel Maestro
+// server.js — Render Cloud + Panel Maestro (FIX duplicados de dispositivos)
 // - Socket.IO para Android y web
 // - Validación de licencias (/api/validate-key)
 // - Catálogo de servidores (/api/servers)
@@ -18,14 +18,14 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static("public")); // sirve /public/index.html
+app.use(express.static("public"));
 
 // ============================
 // 🔌 Socket.IO
 // ============================
 const io = socketIo(server, {
   cors: { origin: "*" },
-  allowEIO3: true, // compatibilidad con Android (socket.io-client 2.x)
+  allowEIO3: true,
 });
 
 // ============================
@@ -47,8 +47,9 @@ const saveJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2));
 // ============================
 // 🗂 Estado en memoria
 // ============================
-let androidClients = new Map(); // socketId -> info cliente
-let panelesLocales = new Map(); // paneles conectados opcionalmente
+let androidClients = new Map(); // deviceId -> info cliente
+let socketToDevice = new Map(); // socket.id -> deviceId
+let panelesLocales = new Map();
 
 function broadcastClients() {
   const list = Array.from(androidClients.values());
@@ -73,31 +74,45 @@ io.on("connection", (socket) => {
 
   console.log(`🌍 Nueva conexión: ${socket.id} (${cleanIp})`);
 
-  // 🔁 Al conectar un panel web o nuevo socket, sincroniza lista actual
   if (androidClients.size > 0) {
     socket.emit("updateClientes", Array.from(androidClients.values()));
     console.log(`📤 Sincronizando ${androidClients.size} cliente(s) activos al nuevo panel.`);
   }
 
-  // 📱 Registro de dispositivo Android
+  // 📱 Registro de dispositivo Android sin duplicar
   socket.on("connectDevice", (data = {}) => {
-    const info = {
-      socketId: socket.id,
-      deviceId: data.deviceId || `unknown-${socket.id}`,
-      nombre: data.nombre || "Desconocido",
-      modelo: data.modelo || "—",
-      versionApp: data.versionApp || "—",
-      licencia: data.licencia || "-",
-      ip: cleanIp,
-      estado: "online",
-      ultimaConexion: new Date().toISOString(),
-    };
-    androidClients.set(socket.id, info);
-    console.log(`📱 Android conectado: ${info.nombre} (${info.licencia})`);
+    const deviceId = (data.deviceId || `unknown-${socket.id}`).trim();
+    socketToDevice.set(socket.id, deviceId);
+
+    if (androidClients.has(deviceId)) {
+      // ♻️ Reconexion de dispositivo existente
+      const existing = androidClients.get(deviceId);
+      existing.socketId = socket.id;
+      existing.estado = "online";
+      existing.ip = cleanIp;
+      existing.ultimaConexion = new Date().toISOString();
+      androidClients.set(deviceId, existing);
+      console.log(`♻️ Reconexion de ${existing.nombre} (${deviceId})`);
+    } else {
+      const info = {
+        socketId: socket.id,
+        deviceId,
+        nombre: data.nombre || "Desconocido",
+        modelo: data.modelo || "—",
+        versionApp: data.versionApp || "—",
+        licencia: data.licencia || "-",
+        ip: cleanIp,
+        estado: "online",
+        ultimaConexion: new Date().toISOString(),
+      };
+      androidClients.set(deviceId, info);
+      console.log(`📱 Nuevo Android conectado: ${info.nombre} (${info.licencia})`);
+    }
+
     broadcastClients();
   });
 
-  // 🧠 Registro de panel local (opcional)
+  // 🧠 Registro de panel local
   socket.on("registerPanel", (panelData = {}) => {
     const data = {
       ...panelData,
@@ -115,12 +130,18 @@ io.on("connection", (socket) => {
 
   // ❌ Desconexión
   socket.on("disconnect", () => {
-    if (androidClients.has(socket.id)) {
-      const c = androidClients.get(socket.id);
-      c.estado = "offline";
-      androidClients.delete(socket.id);
-      console.log(`❌ Cliente Android desconectado: ${c.nombre} (${c.deviceId})`);
-      broadcastClients();
+    if (socketToDevice.has(socket.id)) {
+      const deviceId = socketToDevice.get(socket.id);
+      socketToDevice.delete(socket.id);
+      if (androidClients.has(deviceId)) {
+        const c = androidClients.get(deviceId);
+        c.estado = "offline";
+        c.socketId = null;
+        c.ultimaConexion = new Date().toISOString();
+        androidClients.set(deviceId, c);
+        console.log(`❌ Cliente Android desconectado: ${c.nombre} (${c.deviceId})`);
+        broadcastClients();
+      }
     }
     if (panelesLocales.has(socket.id)) {
       panelesLocales.delete(socket.id);
@@ -129,7 +150,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// 🕒 Reemisión automática cada 60s (por si Render resetea sockets)
+// 🕒 Reemisión automática
 setInterval(() => {
   if (androidClients.size > 0) {
     io.emit("updateClientes", Array.from(androidClients.values()));
@@ -191,18 +212,27 @@ app.post("/api/validate-key", (req, res) => {
 
     console.log(`🔑 Licencia válida usada: ${key} por ${nombre}`);
 
-    const info = {
-      socketId: deviceId,
-      deviceId,
-      nombre,
-      modelo,
-      versionApp: "—",
-      ip: "Licencia validada desde API",
-      licencia: key,
-      estado: "autenticado",
-      ultimaConexion: new Date().toISOString(),
-    };
-    androidClients.set(deviceId, info);
+    // Actualiza o crea sin duplicar
+    if (androidClients.has(deviceId)) {
+      const existing = androidClients.get(deviceId);
+      existing.licencia = key;
+      existing.estado = "autenticado";
+      existing.ultimaConexion = new Date().toISOString();
+      androidClients.set(deviceId, existing);
+    } else {
+      androidClients.set(deviceId, {
+        socketId: null,
+        deviceId,
+        nombre,
+        modelo,
+        versionApp: "—",
+        ip: "Licencia validada desde API",
+        licencia: key,
+        estado: "autenticado",
+        ultimaConexion: new Date().toISOString(),
+      });
+    }
+
     broadcastClients();
 
     let logs = [];
@@ -259,7 +289,7 @@ app.post("/api/assign", (req, res) => {
   console.log(`🔗 Servidor '${srv.name}' asignado a licencia ${license}`);
 
   for (const [, c] of androidClients) {
-    if ((c.licencia || c.key) === license) {
+    if ((c.licencia || c.key) === license && c.socketId) {
       io.to(c.socketId).emit("enviarServidor", { url: srv.url, nombre: srv.name });
       console.log(`📤 Enviado servidor '${srv.name}' a ${c.nombre} (${license})`);
     }
@@ -284,5 +314,6 @@ server.listen(PORT, () => {
   console.log("======================================");
   console.log(`☁️ Servidor Render escuchando en puerto ${PORT}`);
   console.log("✅ Licencias, catálogo y sincronización automática OK");
+  console.log("✅ FIX duplicados aplicado correctamente");
   console.log("======================================");
 });
